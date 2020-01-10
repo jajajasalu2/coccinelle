@@ -268,23 +268,49 @@ let print_disj_list fn l sep =
 (* --------------------------------------------------------------------- *)
 (* Identifier *)
 
+let print_with_comments id lcol rcol =
+  let ident_re = Str.regexp
+    "^\\([a-zA-Z_][a-zA-Z_0-9]*\\)\\(/\\*.*\\*/\\)*$" in
+  let pr_with_comments i c =
+    match c with
+      "" -> print_text i
+    | _ ->
+        print_text i;
+        pr_barrier lcol rcol;
+        print_text c in
+  let get_match i s =
+    try matched i s
+    with Not_found -> "" in
+  if id ==~ ident_re
+  then
+    let matched_id = get_match 1 id in
+    let comment = get_match 2 id in
+    pr_with_comments matched_id comment
+  else print_text id in
+
 let rec ident i =
   match Ast.unwrap i with
       Ast.Id(name) -> mcode print_string name
     | Ast.MetaId(name,_,_,_) ->
+	let (_,_,_,lcol,rcol) = lookup_metavar name in
 	handle_metavar name (function
-			       | (Ast_c.MetaIdVal id) -> print_text id
+			       | (Ast_c.MetaIdVal id) ->
+                                   print_with_comments id lcol rcol
 			       | _ -> error name i "identifier value expected"
 			    )
     | Ast.MetaFunc(name,_,_,_) ->
+	let (_,_,_,lcol,rcol) = lookup_metavar name in
 	handle_metavar name (function
-			       | (Ast_c.MetaFuncVal id) -> print_text id
+			       | (Ast_c.MetaFuncVal id) ->
+                                   print_with_comments id lcol rcol
 			       | _ ->
 				   error name i "function name value expected"
 			    )
     | Ast.MetaLocalFunc(name,_,_,_) ->
+	let (_,_,_,lcol,rcol) = lookup_metavar name in
 	handle_metavar name (function
-			       | (Ast_c.MetaLocalFuncVal id) -> print_text id
+			       | (Ast_c.MetaLocalFuncVal id) ->
+                                   print_with_comments id lcol rcol
 			       | _ ->
 				   error name i
 				     "local function name value expected"
