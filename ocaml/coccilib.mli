@@ -2708,6 +2708,7 @@ module Ast_cocci :
       | Pointer of fullType * string mcode
       | FunctionPointer of fullType * string mcode * string mcode *
           string mcode * string mcode * parameter_list * string mcode
+      | ParenType of string mcode * fullType * string mcode
       | Array of fullType * string mcode * expression option * string mcode
       | Decimal of string mcode * string mcode * expression *
           string mcode option * expression option * string mcode
@@ -3352,6 +3353,7 @@ module Ast0_cocci :
       | Pointer of typeC * string mcode
       | FunctionPointer of typeC * string mcode * string mcode *
           string mcode * string mcode * parameter_list * string mcode
+      | ParenType       of string mcode * typeC * string mcode
       | Array of typeC * string mcode * expression option * string mcode
       | Decimal of string mcode * string mcode * expression *
           string mcode option * expression option * string mcode

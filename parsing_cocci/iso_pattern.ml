@@ -1818,6 +1818,8 @@ let instantiate bindings mv_bindings model =
                           Ast0.rewrap ty (
                             Ast0.FunctionPointer(
                               renamer ty', s0, s1, s2, s3, p, s4))
+                      | Ast0.ParenType (s, ty', e) ->
+                          Ast0.rewrap ty (Ast0.ParenType (s, renamer ty', e))
                       | Ast0.Array(ty', s0, e, s1) ->
                           Ast0.rewrap ty (Ast0.Array(renamer ty', s0, e, s1))
                       | Ast0.Signed(s, ty') ->

@@ -339,6 +339,11 @@ let visitor mode bind option_default
 	| Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
 	    let (t,id) =
               function_pointer (ty,lp1,star,None,rp1,lp2,params,rp2) in t
+	| Ast0.ParenType(lp,ty,rp) ->
+            let (lp_n,lp) = string_mcode lp in
+            let (rp_n,rp) = string_mcode rp in
+	    let (ty_n,ty) = typeC ty in
+            (multibind [ty_n; lp_n; rp_n], Ast0.ParenType(lp,ty,rp))
 	| Ast0.Array(ty,lb,size,rb) ->
             let (t,id) = array_type (ty,None,lb,size,rb) in t
 	| Ast0.Decimal(dec,lp,length,comma,precision_opt,rp) ->
