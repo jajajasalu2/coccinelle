@@ -295,6 +295,7 @@ let token2c (tok,_) add_clt =
   | PC.TLineEnd(clt) -> "line end"
   | PC.TInvalid -> "invalid"
   | PC.TFunDecl(clt) -> "fundecl"
+  | PC.TFunProto(clt) -> "funproto"
 
   | PC.TIso -> "<=>"
   | PC.TRightIso -> "=>"
@@ -480,7 +481,7 @@ let get_clt (tok,_) =
 
   | PC.TOPar0(_,clt) | PC.TMid0(_,clt) | PC.TAnd0(_,clt) | PC.TCPar0(_,clt)
   | PC.TOEllipsis(clt) | PC.TCEllipsis(clt)
-  | PC.TPOEllipsis(clt) | PC.TPCEllipsis(clt)
+  | PC.TPOEllipsis(clt) | PC.TPCEllipsis(clt) | PC.TFunProto(clt)
   | PC.TFunDecl(clt) | PC.TDirective(_,clt) | PC.TAttr_(clt)
   | PC.TLineEnd(clt) -> clt
   | PC.TVAEllipsis(clt) -> clt
@@ -718,6 +719,7 @@ let update_clt (tok,x) clt =
 
   | PC.TLineEnd(_) -> (PC.TLineEnd(clt),x)
   | PC.TFunDecl(_) -> (PC.TFunDecl(clt),x)
+  | PC.TFunProto(_) -> (PC.TFunProto(clt),x)
   | PC.TTildeExclEq(_) -> (PC.TTildeExclEq(clt),x)
   | PC.TDirective(a,_) -> (PC.TDirective(a,clt),x)
   | PC.TAttr_(_) -> (PC.TAttr_(clt),x)
@@ -925,7 +927,7 @@ let split_token ((tok,_) as t) =
   | PC.TInitialize | PC.TFinalize -> ([t],[t])
   | PC.TPArob clt | PC.TMetaPos(_,_,_,clt) | PC.TMetaCom(_,_,clt) -> split t clt
 
-  | PC.TFunDecl(clt)
+  | PC.TFunDecl(clt) | PC.TFunProto(clt)
   | PC.TWhen(clt) | PC.TWhenTrue(clt) | PC.TWhenFalse(clt)
   | PC.TAny(clt) | PC.TStrict(clt) | PC.TLineEnd(clt)
   | PC.TEllipsis(clt)
@@ -1006,7 +1008,8 @@ let find_function_names l =
     | _ -> false in
   let rec split acc = function
       [] | [_] -> raise Irrelevant
-    | ((PC.TCPar(_),_) as t1) :: ((PC.TOBrace(_),_) as t2) :: rest ->
+    | ((PC.TCPar(_),_) as t1) :: ((PC.TOBrace(_),_) as t2) :: rest
+    | ((PC.TCPar(_),_) as t1) :: ((PC.TPtVirg(_),_) as t2) :: rest ->
 	(List.rev (t1::acc),(t2::rest))
     | x::xs -> split (x::acc) xs in
   let rec balanced_name level = function
@@ -1037,7 +1040,48 @@ let find_function_names l =
     | (PC.TArobArob,_)::_ | (PC.TArob,_)::_ | (PC.EOF,_)::_ ->
 	raise Irrelevant
     | t::rest -> balanced_args level rest in
-  let rec loop = function
+  let rec is_permissible_proto = function
+      [] -> false
+    | (PC.TCPar0(_),_)::
+      ((PC.TMid0(_),_) | (PC.TAnd0(_),_))::
+      (PC.TOPar0(_),_)::_ -> false
+    | (PC.TOPar0(_),_)::rest
+    | (PC.TCPar0(_),_)::rest -> is_permissible_proto rest
+    | x::rest when is_mid x ->
+        let rec loop = function
+          [] -> false
+        | (PC.TOPar0(_),_)::xs -> is_permissible_proto xs
+        | x::xs -> loop xs in
+        loop rest
+    | _::((PC.TEq(_),_) | (PC.TNotEq(_),_))::(PC.TWhen(_),_)::_
+    | _::(PC.TWhen(_),_)::_
+    | (PC.TComma(_),_)::_
+    | (PC.TDirective(_),_)::_
+    | (PC.TElse(_),_)::_
+    | (PC.TReturn(_),_)::_
+    | (PC.TMetaStm(_),_)::_
+    | (PC.TMetaExp(_),_)::_
+    | (PC.TMetaId(_),_)::_
+    | (PC.TMetaLocalIdExp(_),_)::_
+    | (PC.TEq(_),_)::_
+    | (PC.TEllipsis(_),_)::_
+    | (PC.TOEllipsis(_),_)::_
+    | (PC.TCEllipsis(_),_)::_
+    | (PC.TPOEllipsis(_),_)::_
+    | (PC.TPCEllipsis(_),_)::_
+    | (PC.TPtVirg(_),_)::_
+    | (PC.TOBrace(_),_)::_
+    | (PC.TCBrace(_),_)::_
+    | (PC.TOPar(_),_)::_
+    | (PC.TCPar(_),_)::_
+    | (PC.TIdent(_),_)::_ -> false
+    | _ -> true in
+  let decl_or_proto clt info bef aft =
+    match aft with
+      (PC.TOBrace(_),_)::_ -> (((PC.TFunDecl(clt),info) :: bef), aft)
+    | (PC.TPtVirg(_),_)::_ -> (((PC.TFunProto(clt),info) :: bef), aft)
+    | _ -> raise Irrelevant in
+  let rec loop acc = function
       [] -> []
     | t :: rest ->
 	if is_par t || is_mid t || is_ident t
@@ -1046,26 +1090,30 @@ let find_function_names l =
 	    try
 	      let (bef,aft) = split [] (t::rest) in
 	      let rest = balanced_name 0 bef in
+              (match aft with
+                (PC.TPtVirg(_),_)::_
+                 when not(is_permissible_proto acc) -> raise Irrelevant
+              | _ ->
 	      (match rest with
 		(PC.TOPar(_),_)::_ ->
 		  (match balanced_args 0 rest with
 		    [] ->
 		      let (_,info) as h = List.hd bef in
 		      let clt = get_clt h in
-		      (((PC.TFunDecl(clt),info) :: bef), aft)
+                      decl_or_proto clt info bef aft
 		  | (PC.TAttr_(_),_)::rest ->
 		      (match balanced_args 0 rest with
 			[] ->
 			  let (_,info) as h = List.hd bef in
 			  let clt = get_clt h in
-			  (((PC.TFunDecl(clt),info) :: bef), aft)
+                          decl_or_proto clt info bef aft
 		      | _ -> raise Irrelevant)
 		  | _ -> raise Irrelevant)
-	      | _ -> raise Irrelevant)
+	      | _ -> raise Irrelevant))
 	    with Irrelevant -> ([t],rest) in
-	  t @ (loop rest)
-	else t :: (loop rest) in
-  loop l
+          t @ (loop (t @ acc) rest)
+        else t :: (loop (t :: acc) rest) in
+  loop [] l
 
 (* ----------------------------------------------------------------------- *)
 (* an attribute is an identifier that precedes another identifier and
@@ -1168,6 +1216,8 @@ let detect_types in_meta_decls l =
 	delim::newid::id::(loop false infn (ident::type_names) rest)
     | ((PC.TFunDecl(_),_) as fn)::rest ->
 	fn::(loop false 1 type_names rest)
+    | ((PC.TFunProto(_),_) as fn)::rest ->
+	fn::(loop false 1 type_names rest)
     | ((PC.TOPar(_),_) as lp)::rest when infn > 0 ->
 	lp::(loop false (infn + 1) type_names rest)
     | ((PC.TCPar(_),_) as rp)::rest when infn > 0 ->
@@ -1252,7 +1302,7 @@ let token2line (tok,_) =
   | PC.TMetaDParamList(_,_,_,_,clt) | PC.TMetaFunc(_,_,_,clt)
   | PC.TMetaLocalFunc(_,_,_,clt) | PC.TMetaPos(_,_,_,clt) | PC.TMetaCom(_,_,clt)
 
-  | PC.TFunDecl(clt)
+  | PC.TFunDecl(clt) | PC.TFunProto(clt)
   | PC.TWhen(clt) | PC.TWhenTrue(clt) | PC.TWhenFalse(clt)
   | PC.TAny(clt) | PC.TStrict(clt) | PC.TEllipsis(clt)
 
