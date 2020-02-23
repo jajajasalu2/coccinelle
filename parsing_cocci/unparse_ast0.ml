@@ -287,11 +287,6 @@ and string_format e =
 (* --------------------------------------------------------------------- *)
 (* Types *)
 
-and print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2) fn =
-  typeC ty; mcode print_string lp1; mcode print_string star; fn();
-  mcode print_string rp1; mcode print_string lp2;
-  parameter_list params; mcode print_string rp2
-
 and print_parentype (lp,ty,rp) fn =
  match Ast0.unwrap ty with
    Ast0.Pointer(ty1,star) ->
@@ -337,9 +332,6 @@ and typeC t =
 	    strings
       |	Ast0.Signed(sgn,ty) -> mcode U.sign sgn; print_option typeC ty
       | Ast0.Pointer(ty,star) -> typeC ty; mcode print_string star
-      | Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-	  print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2)
-	    (function _ -> ())
       | Ast0.ParenType(lp,ty,rp) ->
           print_parentype (lp,ty,rp) (function _ -> ())
       | Ast0.FunctionType(ty,lp,params,rp) ->
@@ -393,10 +385,7 @@ and typeC t =
 
 and print_named_type ty id =
   match Ast0.unwrap ty with
-    Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-      print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2)
-	(function _ -> print_string " "; ident id)
-  | Ast0.Array(ty,lb,size,rb) ->
+    Ast0.Array(ty,lb,size,rb) ->
       let rec loop ty k =
 	match Ast0.unwrap ty with
 	  Ast0.Array(ty,lb,size,rb) ->

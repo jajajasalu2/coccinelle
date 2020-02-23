@@ -297,19 +297,6 @@ let combiner bind option_default
       | Ast.OptType(ty) -> fullType ty in
     ftfn all_functions k ft
 
-  and function_pointer
-	(ty, lp1, star, (id : Ast.ident option), rp1, lp2, params, rp2) =
-    (* have to put the treatment of the identifier into the right position *)
-    let lty = fullType ty in
-    let llp1 = string_mcode lp1 in
-    let lstar = string_mcode star in
-    let lid = match id with Some idd -> [ident idd] | None -> [] in
-    let lrp1 = string_mcode rp1 in
-    let llp2 = string_mcode lp2 in
-    let lparams = parameter_dots params in
-    let lrp2 = string_mcode rp2 in
-    multibind ([lty; llp1; lstar] @ lid @ [lrp1; llp2; lparams; lrp2])
-
   and array_type (ty,(id : Ast.ident option),lb,size,rb) =
     let lty = fullType ty in
     let lid = match id with Some idd -> [ident idd] | None -> [] in
@@ -385,8 +372,6 @@ let combiner bind option_default
 	  let lty = fullType ty in
 	  let lstar = string_mcode star in
 	  bind lty lstar
-      | Ast.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-	  function_pointer (ty,lp1,star,None,rp1,lp2,params,rp2)
       | Ast.ParenType(lp,ty,rp) ->
           parentype_type (lp,ty,None,rp)
       | Ast.FunctionType(ty,lp,params,rp) ->
@@ -444,8 +429,6 @@ let combiner bind option_default
     match Ast.unwrap ty with
       Ast.Type(_,None,ty1) ->
 	(match Ast.unwrap ty1 with
-	  Ast.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-	    function_pointer (ty, lp1, star, Some id, rp1, lp2, params, rp2)
 	| Ast.Array(ty,lb,size,rb) -> array_type (ty, Some id, lb, size, rb)
         | Ast.ParenType(lp,ty,rp) -> parentype_type (lp, ty, Some id, rp)
 	| _ -> let lty = fullType ty in
@@ -1308,15 +1291,6 @@ let rebuilder
 	    let lty = fullType ty in
 	    let lstar = string_mcode star in
 	    Ast.Pointer (lty, lstar)
-	| Ast.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-	    let lty = fullType ty in
-	    let llp1 = string_mcode lp1 in
-	    let lstar = string_mcode star in
-	    let lrp1 = string_mcode rp1 in
-	    let llp2 = string_mcode lp2 in
-	    let lparams = parameter_dots params in
-	    let lrp2 = string_mcode rp2 in
-	    Ast.FunctionPointer(lty, llp1, lstar, lrp1, llp2, lparams, lrp2)
         | Ast.ParenType(lp,ty,rp) ->
             let llp = string_mcode lp in
             let lty = fullType ty in

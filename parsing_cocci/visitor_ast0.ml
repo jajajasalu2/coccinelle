@@ -336,9 +336,6 @@ let visitor mode bind option_default
 	    let (ty_n,ty) = typeC ty in
 	    let (star_n,star) = string_mcode star in
 	    (bind ty_n star_n, Ast0.Pointer(ty,star))
-	| Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-	    let (t,id) =
-              function_pointer (ty,lp1,star,None,rp1,lp2,params,rp2) in t
         | Ast0.ParenType(lp,ty,rp) ->
 	    let (t,id) =
               parentype_type (lp,ty,None,rp) in t
@@ -411,23 +408,6 @@ let visitor mode bind option_default
 	    let (asty_n,asty) = typeC asty in
 	    (bind ty_n asty_n, Ast0.AsType(ty,asty))) in
     tyfn all_functions k t
-
-  (* returns ((bind value,original value),id) since id may have been updated*)
-  and function_pointer
-      (ty,lp1,star,(id : Ast0.ident option),rp1,lp2,params,rp2) =
-    let (ty_n,ty) = typeC ty in
-    let (lp1_n,lp1) = string_mcode lp1 in
-    let (star_n,star) = string_mcode star in
-    let (idl,idu) = (match id with
-      | Some a -> let (b,c) = ident a in ([b],Some c)
-      | None -> ([],None)) in
-    let (rp1_n,rp1) = string_mcode rp1 in
-    let (lp2_n,lp2) = string_mcode lp2 in
-    let (params_n,params) = parameter_dots params in
-    let (rp2_n,rp2) = string_mcode rp2 in
-    (* have to put the treatment of the identifier into the right position *)
-    ((multibind ([ty_n;lp1_n;star_n] @ idl @ [rp1_n;lp2_n;params_n;rp2_n]),
-     Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2)), idu)
 
   (* returns ((bind value,original value),id) since id may have been updated*)
   and array_type (ty,(id : Ast0.ident option),lb,size,rb) =
@@ -513,12 +493,7 @@ let visitor mode bind option_default
 
   and named_type ty id =
     match Ast0.unwrap ty with
-      Ast0.FunctionPointer(rty,lp1,star,rp1,lp2,params,rp2) ->
-	let (tyres, idn) =
-          function_pointer (rty,lp1,star,Some id,rp1,lp2,params,rp2) in
-        let idn = match idn with Some i -> i | None -> failwith "Impossible" in
-	(rewrap ty tyres, idn)
-    | Ast0.Array(rty,lb,size,rb) ->
+      Ast0.Array(rty,lb,size,rb) ->
 	let (tyres, idn) = array_type (rty,Some id,lb,size,rb) in
         let idn = match idn with Some i -> i | None -> failwith "Impossible" in
 	(rewrap ty tyres, idn)
@@ -533,23 +508,6 @@ let visitor mode bind option_default
     | _ -> let (ty_n,ty) = typeC ty in
            let (id_n,id) = ident id in
              ((bind ty_n id_n, ty), id)
-
-  (* returns ((bind value,original value),id) since id may have been updated*)
-  (* the next three functions are needed due to a lack of polymorphism :( *)
-  and function_pointer_typedef (ty,lp1,star,id,rp1,lp2,params,rp2) =
-    let (ty_n,ty) = typeC ty in
-    let (lp1_n,lp1) = string_mcode lp1 in
-    let (star_n,star) = string_mcode star in
-    let (idl,idu) = (match id with
-      | Some a -> let (b,c) = typeC a in ([b],Some c)
-      | None -> ([],None)) in
-    let (rp1_n,rp1) = string_mcode rp1 in
-    let (lp2_n,lp2) = string_mcode lp2 in
-    let (params_n,params) = parameter_dots params in
-    let (rp2_n,rp2) = string_mcode rp2 in
-    (* have to put the treatment of the identifier into the right position *)
-    ((multibind ([ty_n;lp1_n;star_n] @ idl @ [rp1_n;lp2_n;params_n;rp2_n]),
-     Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2)), idu)
 
   (* returns ((bind value,original value),id) since id may have been updated*)
   and array_type_typedef (ty,id,lb,size,rb) =
@@ -636,12 +594,7 @@ let visitor mode bind option_default
 
   and named_type_typedef ty id =
     match Ast0.unwrap ty with
-      Ast0.FunctionPointer(rty,lp1,star,rp1,lp2,params,rp2) ->
-	let (tyres, idn) =
-          function_pointer_typedef (rty,lp1,star,Some id,rp1,lp2,params,rp2) in
-        let idn = match idn with Some i -> i | None -> failwith "Impossible" in
-	(rewrap ty tyres, idn)
-    | Ast0.Array(rty,lb,size,rb) ->
+      Ast0.Array(rty,lb,size,rb) ->
 	let (tyres, idn) = array_type_typedef (rty,Some id,lb,size,rb) in
         let idn = match idn with Some i -> i | None -> failwith "Impossible" in
 	(rewrap ty tyres, idn)

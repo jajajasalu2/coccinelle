@@ -92,7 +92,6 @@ let typeC t =
   | Ast0.BaseType(ty,strings) -> [48]
   | Ast0.Signed(sign,ty) -> [129]
   | Ast0.Pointer(ty,star) -> [49]
-  | Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) -> [131]
   | Ast0.ParenType(lp,ty,rp) -> [138]
   | Ast0.FunctionType(ty,lp,params,rp) -> [139]
   | Ast0.Array(ty,lb,size,rb) -> [50]

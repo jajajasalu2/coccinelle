@@ -397,12 +397,6 @@ and fullType ft =
   | Ast.ConjType(decls) -> print_disj_list fullType decls "&"
   | Ast.OptType(ty) -> print_string "?"; fullType ty
 
-and print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2) fn =
-  fullType ty; print_string " ";
-  mcode print_string lp1; mcode print_string star; fn();
-  mcode print_string rp1; mcode print_string lp1;
-  parameter_list params; mcode print_string rp2
-
 and print_parentype (lp,ty,rp) fn =
     match Ast.unwrap ty with
      Ast.Type(_,_,fty1) ->
@@ -469,9 +463,6 @@ and typeC ty =
       List.iter (function s -> mcode print_string s; print_string " ") strings
   | Ast.SignedT(sgn,ty) -> mcode sign sgn; print_option typeC ty
   | Ast.Pointer(ty,star) -> fullType ty; mcode print_string star
-  | Ast.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-      print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2)
-	(function _ -> ())
   | Ast.ParenType(lp,ty,rp) ->
       print_parentype (lp,ty,rp) (function _ -> ())
   | Ast.FunctionType(ty,lp,params,rp) ->
@@ -532,10 +523,7 @@ and print_named_type ty id =
   match Ast.unwrap ty with
     Ast.Type(_,None,ty1) ->
       (match Ast.unwrap ty1 with
-	Ast.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-	  print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2)
-	    (function _ -> id())
-      | Ast.Array(ty,lb,size,rb) ->
+        Ast.Array(ty,lb,size,rb) ->
 	  let rec loop ty k =
 	    match Ast.unwrap ty with
 	      Ast.Array(ty,lb,size,rb) ->

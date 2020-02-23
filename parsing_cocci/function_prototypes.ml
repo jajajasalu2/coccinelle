@@ -226,9 +226,6 @@ let rec attach_right strings ty =
     | Ast0.Signed(sgn,Some ty) ->
 	Ast0.Signed(sgn,Some (attach_right strings ty))
     | Ast0.Pointer(ty,star) -> Ast0.Pointer(ty,right_attach_mcode strings star)
-    | Ast0.FunctionPointer(ty,lp,star,rp,lp1,ps,rp1) ->
-	Ast0.FunctionPointer(ty,lp,star,rp,lp1,ps,
-			     right_attach_mcode strings rp1)
     | Ast0.ParenType(lp,ty,rp) ->
 	Ast0.ParenType(lp,ty,right_attach_mcode strings rp)
     | Ast0.FunctionType(ty,lp,ps,rp) ->

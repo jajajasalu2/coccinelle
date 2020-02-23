@@ -322,9 +322,6 @@ and base_typeC =
     BaseType        of baseType * string mcode list (* Yoann style *)
   | SignedT         of sign mcode * typeC option
   | Pointer         of fullType * string mcode (* * *)
-  | FunctionPointer of fullType *
-	          string mcode(* ( *)*string mcode(* * *)*string mcode(* ) *)*
-                  string mcode (* ( *)*parameter_list*string mcode(* ) *)
   | ParenType       of string mcode (* ( *) * fullType * string mcode (* ) *)
   | FunctionType    of fullType *
                   string mcode (* ( *) * parameter_list * string mcode (* ) *)

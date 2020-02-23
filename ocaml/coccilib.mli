@@ -2707,8 +2707,6 @@ module Ast_cocci :
         BaseType of baseType * string mcode list
       | SignedT of sign mcode * typeC option
       | Pointer of fullType * string mcode
-      | FunctionPointer of fullType * string mcode * string mcode *
-          string mcode * string mcode * parameter_list * string mcode
       | ParenType of string mcode (* ( *) * fullType * string mcode (* ) *)
       | FunctionType of fullType *
           string mcode (* ( *) * parameter_list * string mcode (* ) *)
@@ -3354,8 +3352,6 @@ module Ast0_cocci :
       | BaseType of Ast_cocci.baseType * string mcode list
       | Signed of Ast_cocci.sign mcode * typeC option
       | Pointer of typeC * string mcode
-      | FunctionPointer of typeC * string mcode * string mcode *
-          string mcode * string mcode * parameter_list * string mcode
       | ParenType of string mcode * typeC * string mcode
       | FunctionType of typeC *
           string mcode * parameter_list * string mcode
