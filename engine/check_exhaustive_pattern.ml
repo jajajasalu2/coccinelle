@@ -149,6 +149,8 @@ let dumb_astcocci_type = function
  | A.SignedT (signa,tya) -> ()
  | A.Pointer (typa, _) -> ()
  | A.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) -> ()
+ | A.ParenType(lp,ty,rp) -> ()
+ | A.FunctionType(ty,lp,params,rp) -> ()
  | A.Array (typa, _, eaopt, _) -> ()
  | A.Decimal(_, _, _, _, _, _) -> ()
  | A.EnumName(en, ena) -> ()
