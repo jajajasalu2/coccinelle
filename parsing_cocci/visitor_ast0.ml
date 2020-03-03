@@ -339,6 +339,12 @@ let visitor mode bind option_default
 	| Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
 	    let (t,id) =
               function_pointer (ty,lp1,star,None,rp1,lp2,params,rp2) in t
+        | Ast0.ParenType(lp,ty,rp) ->
+	    let (t,id) =
+              parentype_type (lp,ty,None,rp) in t
+        | Ast0.FunctionType(ty,lp,params,rp) ->
+	    let (t,id) =
+              functiontype_type (ty,None,lp,params,rp) in t
 	| Ast0.Array(ty,lb,size,rb) ->
             let (t,id) = array_type (ty,None,lb,size,rb) in t
 	| Ast0.Decimal(dec,lp,length,comma,precision_opt,rp) ->
@@ -435,6 +441,76 @@ let visitor mode bind option_default
     ((multibind ([ty_n] @ idl @ [lb_n;size_n;rb_n]),
      Ast0.Array(ty,lb,size,rb)), idu)
 
+  and parentype_type (lp,ty,(id : Ast0.ident option),rp) =
+    match Ast0.unwrap ty with
+      Ast0.Pointer(ty1,star) ->
+        (match Ast0.unwrap ty1 with
+          Ast0.FunctionType(ty2,lp2,params,rp2) ->
+            let (ty_n,typ) = typeC ty2 in
+            let (lp_n,lp) = string_mcode lp in
+            let (star_n,star) = string_mcode star in
+            let (idl,idu) = (match id with
+              | Some a -> let (b,c) = ident a in ([b],Some c)
+              | None -> ([],None)) in
+            let (rp_n,rp) = string_mcode rp in
+            let (lp2_n,lp2) = string_mcode lp2 in
+            let (params_n,params) = parameter_dots params in
+            let (rp2_n,rp2) = string_mcode rp2 in
+            ((multibind ([ty_n;lp_n;star_n] @ idl @
+              [rp_n;lp2_n;params_n;rp2_n]),
+               Ast0.ParenType
+                 (lp,
+                  Ast0.rewrap ty1 (Ast0.Pointer
+                   (Ast0.rewrap ty2 (Ast0.FunctionType
+                     (typ,lp2,params,rp2)),star)),rp)), idu)
+	| _ -> failwith "ParenType Visitor_ast0")
+    | Ast0.Array(ty1,lb1,size1,rb1) ->
+        (match Ast0.unwrap ty1 with
+          Ast0.Pointer(ty2,star) ->
+            (match Ast0.unwrap ty2 with
+              Ast0.FunctionType(ty3,lp3,params,rp3) ->
+                let (ty_n,typ) = typeC ty3 in
+                let (lp_n,lp) = string_mcode lp in
+                let (star_n,star) = string_mcode star in
+                let (idl,idu) = (match id with
+                  | Some a -> let (b,c) = ident a in ([b],Some c)
+                  | None -> ([],None)) in
+                let (lb1_n,lb1) = string_mcode lb1 in
+                let (size_n,size1) = get_option expression size1 in
+                let (rb1_n,rb1) = string_mcode rb1 in
+                let (rp_n,rp) = string_mcode rp in
+                let (lp3_n,lp3) = string_mcode lp3 in
+                let (params_n,params) = parameter_dots params in
+                let (rp3_n,rp3) = string_mcode rp3 in
+                ((multibind ([ty_n;lp_n;star_n] @ idl @
+                  [lb1_n;size_n;rb1_n;rp_n;lp3_n;params_n;rp3_n]),
+                   Ast0.ParenType
+                     (lp,
+                      Ast0.rewrap ty1
+                       (Ast0.Array
+                         (Ast0.rewrap ty2 
+                           (Ast0.Pointer
+                             (Ast0.rewrap ty3
+                               (Ast0.FunctionType(typ,lp3,params,rp3)),
+                              star)),
+                        lb1,size1,rb1)),
+                   rp)),
+                 idu)
+    	    | _ -> failwith "ParenType Visitor_ast0")
+        | _ -> failwith "ParenType Visitor_ast0")
+    | _ -> failwith "ParenType Visitor_ast0"
+
+  and functiontype_type (ty,(id : Ast0.ident option),lp,params,rp) =
+    let (ty_n,ty) = typeC ty in
+    let (idl,idu) = (match id with
+      | Some a -> let (b,c) = ident a in ([b],Some c)
+      | None -> ([],None)) in
+    let (lp_n,lp) = string_mcode lp in
+    let (params_n,params) = parameter_dots params in
+    let (rp_n,rp) = string_mcode rp in
+    ((multibind ([ty_n] @ idl @ [lp_n; params_n; rp_n]),
+     Ast0.FunctionType(ty,lp,params,rp)), idu)
+
   and named_type ty id =
     match Ast0.unwrap ty with
       Ast0.FunctionPointer(rty,lp1,star,rp1,lp2,params,rp2) ->
@@ -444,6 +520,14 @@ let visitor mode bind option_default
 	(rewrap ty tyres, idn)
     | Ast0.Array(rty,lb,size,rb) ->
 	let (tyres, idn) = array_type (rty,Some id,lb,size,rb) in
+        let idn = match idn with Some i -> i | None -> failwith "Impossible" in
+	(rewrap ty tyres, idn)
+    | Ast0.ParenType(lp,rty,rp) ->
+	let (tyres, idn) = parentype_type (lp,rty,Some id,rp) in
+        let idn = match idn with Some i -> i | None -> failwith "Impossible" in
+	(rewrap ty tyres, idn)
+    | Ast0.FunctionType(rty,lp,params,rp) ->
+	let (tyres, idn) = functiontype_type (rty,Some id,lp,params,rp) in
         let idn = match idn with Some i -> i | None -> failwith "Impossible" in
 	(rewrap ty tyres, idn)
     | _ -> let (ty_n,ty) = typeC ty in
@@ -479,6 +563,77 @@ let visitor mode bind option_default
     ((multibind ([ty_n] @ idl @ [lb_n;size_n;rb_n]),
      Ast0.Array(ty,lb,size,rb)), idu)
 
+  (* returns ((bind value,original value),id) since id may have been updated*)
+  and parentype_typedef (lp,ty,id,rp) =
+    match Ast0.unwrap ty with
+      Ast0.Pointer(ty1,star) ->
+        (match Ast0.unwrap ty1 with
+          Ast0.FunctionType(ty2,lp2,params,rp2) ->
+            let (ty_n,typ) = typeC ty2 in
+            let (lp_n,lp) = string_mcode lp in
+            let (star_n,star) = string_mcode star in
+            let (idl,idu) = (match id with
+              | Some a -> let (b,c) = typeC a in ([b],Some c)
+              | None -> ([],None)) in
+            let (rp_n,rp) = string_mcode rp in
+            let (lp2_n,lp2) = string_mcode lp2 in
+            let (params_n,params) = parameter_dots params in
+            let (rp2_n,rp2) = string_mcode rp2 in
+            ((multibind ([ty_n;lp_n;star_n] @ idl @
+              [rp_n;lp2_n;params_n;rp2_n]),
+               Ast0.ParenType
+                 (lp,
+                  Ast0.rewrap ty1 (Ast0.Pointer
+                   (Ast0.rewrap ty2 (Ast0.FunctionType
+                     (typ,lp2,params,rp2)),star)),rp)), idu)
+	| _ -> failwith "ParenType Visitor_ast0")
+    | Ast0.Array(ty1,lb1,size1,rb1) ->
+        (match Ast0.unwrap ty with
+          Ast0.Pointer(ty2,star) ->
+            (match Ast0.unwrap ty1 with
+              Ast0.FunctionType(ty3,lp3,params,rp3) ->
+                let (ty_n,typ) = typeC ty3 in
+                let (lp_n,lp) = string_mcode lp in
+                let (star_n,star) = string_mcode star in
+                let (idl,idu) = (match id with
+                  | Some a -> let (b,c) = typeC a in ([b],Some c)
+                  | None -> ([],None)) in
+                let (lb1_n,lb1) = string_mcode lb1 in
+                let (size_n,size1) = get_option expression size1 in
+                let (rb1_n,rb1) = string_mcode rb1 in
+                let (rp_n,rp) = string_mcode rp in
+                let (lp3_n,lp3) = string_mcode lp3 in
+                let (params_n,params) = parameter_dots params in
+                let (rp3_n,rp3) = string_mcode rp3 in
+                ((multibind ([ty_n;lp_n;star_n] @ idl @
+                  [lb1_n;size_n;rb1_n;rp_n;lp3_n;params_n;rp3_n]),
+                   Ast0.ParenType
+                     (lp,
+                      Ast0.rewrap ty1
+                       (Ast0.Array
+                         (Ast0.rewrap ty2 
+                           (Ast0.Pointer
+                             (Ast0.rewrap ty3
+                               (Ast0.FunctionType(typ,lp3,params,rp3)),
+                              star)),
+                        lb1,size1,rb1)),
+                   rp)),
+                 idu)
+    	    | _ -> failwith "ParenType Visitor_ast0")
+        | _ -> failwith "ParenType Visitor_ast0")
+    | _ -> failwith "ParenType Visitor_ast0"
+
+  and functiontype_typedef (ty,id,lp,params,rp) =
+    let (ty_n,ty) = typeC ty in
+    let (idl,idu) = (match id with
+      | Some a -> let (b,c) = typeC a in ([b],Some c)
+      | None -> ([],None)) in
+    let (lp_n,lp) = string_mcode lp in
+    let (params_n,params) = parameter_dots params in
+    let (rp_n,rp) = string_mcode rp in
+    ((multibind ([ty_n] @ idl @ [lp_n; params_n; rp_n]),
+     Ast0.FunctionType(ty,lp,params,rp)), idu)
+
   and named_type_typedef ty id =
     match Ast0.unwrap ty with
       Ast0.FunctionPointer(rty,lp1,star,rp1,lp2,params,rp2) ->
@@ -488,6 +643,14 @@ let visitor mode bind option_default
 	(rewrap ty tyres, idn)
     | Ast0.Array(rty,lb,size,rb) ->
 	let (tyres, idn) = array_type_typedef (rty,Some id,lb,size,rb) in
+        let idn = match idn with Some i -> i | None -> failwith "Impossible" in
+	(rewrap ty tyres, idn)
+    | Ast0.ParenType(lp,rty,rp) ->
+	let (tyres, idn) = parentype_typedef (lp,rty,Some id,rp) in
+        let idn = match idn with Some i -> i | None -> failwith "Impossible" in
+	(rewrap ty tyres, idn)
+    | Ast0.FunctionType(rty,lp,params,rp) ->
+	let (tyres, idn) = functiontype_typedef (rty,Some id,lp,params,rp) in
         let idn = match idn with Some i -> i | None -> failwith "Impossible" in
 	(rewrap ty tyres, idn)
     | _ -> let (ty_n,ty) = typeC ty in
