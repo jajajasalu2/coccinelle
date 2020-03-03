@@ -1110,6 +1110,10 @@ let rec string_of_typeC ty =
       string_of_fullType ty' ^ "*"
   | FunctionPointer (ty', _, _, _, _, _, _) ->
       string_of_fullType ty' ^ "(*)()"
+  | ParenType (_ , ty', _) ->
+      "(" ^ string_of_fullType ty' ^ ")"
+  | FunctionType (ty' , _, _, _) ->
+      string_of_fullType ty' ^ "()"
   | Array (ty', _, _, _) ->
       string_of_fullType ty' ^ "[]"
   | Decimal(_, _, e0, _, e1, _) ->
@@ -1191,6 +1195,10 @@ and typeC_map tr ty =
   | Pointer (ty', s) -> rewrap ty (Pointer (fullType_map tr ty', s))
   | FunctionPointer (ty, s0, s1, s2, s3, s4, s5) ->
       rewrap ty (FunctionPointer (fullType_map tr ty, s0, s1, s2, s3, s4, s5))
+  | ParenType (s0, ty', s1) ->
+      rewrap ty (ParenType (s0, fullType_map tr ty', s1))
+  | FunctionType (ty', s0, s1, s2) ->
+      rewrap ty (FunctionType (fullType_map tr ty', s0, s1, s2))
   | Array (ty', s0, s1, s2) ->
       rewrap ty (Array (fullType_map tr ty', s0, s1, s2))
   | EnumName (s0, ident) ->
@@ -1250,6 +1258,8 @@ and typeC_fold tr ty v =
   | SignedT (_, Some ty') -> typeC_fold tr ty' v
   | Pointer (ty', _)
   | FunctionPointer (ty', _, _, _, _, _, _)
+  | ParenType (_, ty', _)
+  | FunctionType (ty', _, _, _)
   | Array (ty', _, _, _)
   | EnumDef (ty', _, _, _)
   | StructUnionDef (ty', _, _, _) -> fullType_fold tr ty' v
