@@ -419,6 +419,23 @@ and top_typeC tgt opt_allowed typ =
       let params = parameter_list tgt params in
       make_typeC typ tgt arity
 	(Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2))
+  | Ast0.ParenType(lp,ty,rp) ->
+      let arity =
+        all_same opt_allowed tgt (mcode2line lp)
+        [mcode2arity lp; mcode2arity rp] in
+      let lp = mcode lp in
+      let ty = typeC arity ty in
+      let rp = mcode rp in
+      make_typeC typ tgt arity (Ast0.ParenType(lp,ty,rp))
+  | Ast0.FunctionType(ty,lp,params,rp) ->
+      let arity =
+        all_same opt_allowed tgt (mcode2line lp)
+        [mcode2arity lp; mcode2arity rp] in
+      let ty = typeC arity ty in
+      let lp = mcode lp in
+      let params = parameter_list tgt params in
+      let rp = mcode rp in
+      make_typeC typ tgt arity (Ast0.FunctionType(ty,lp,params,rp))
   | Ast0.Array(ty,lb,size,rb) ->
       let arity =
 	all_same opt_allowed tgt (mcode2line lb)
