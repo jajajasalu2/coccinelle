@@ -292,6 +292,40 @@ and print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2) fn =
   mcode print_string rp1; mcode print_string lp2;
   parameter_list params; mcode print_string rp2
 
+and print_parentype (lp,ty,rp) fn =
+ match Ast0.unwrap ty with
+   Ast0.Pointer(ty1,star) ->
+     (match Ast0.unwrap ty1 with
+       Ast0.FunctionType(ty2,lp2,params,rp2) ->
+         typeC ty2;
+         mcode print_string lp;
+         mcode print_string star;
+         fn();
+         mcode print_string rp;
+         mcode print_string lp2;
+         parameter_list params;
+         mcode print_string rp2;
+       | _ -> failwith "ParenType Unparse_ast0")
+ | Ast0.Array(ty1,lb1,size1,rb1) ->
+     (match Ast0.unwrap ty1 with
+       Ast0.Pointer(ty2,star) ->
+         (match Ast0.unwrap ty2 with
+           Ast0.FunctionType(ty3,lp3,params,rp3) ->
+             typeC ty3;
+             mcode print_string lp;
+             mcode print_string star;
+             fn();
+             mcode print_string lb1;
+             print_option expression size1;
+             mcode print_string rb1;
+             mcode print_string rp;
+             mcode print_string lp3;
+             parameter_list params;
+             mcode print_string rp3;
+ 	| _ -> failwith "ParenType Unparse_ast0")
+     | _ -> failwith "ParenType Unparse_ast0")
+ | _ -> failwith "ParenType Unparse_ast0"
+
 and typeC t =
   print_context t
     (function _ ->
@@ -306,6 +340,13 @@ and typeC t =
       | Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
 	  print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2)
 	    (function _ -> ())
+      | Ast0.ParenType(lp,ty,rp) ->
+          print_parentype (lp,ty,rp) (function _ -> ())
+      | Ast0.FunctionType(ty,lp,params,rp) ->
+          typeC ty;
+          mcode print_string lp;
+          parameter_list params;
+          mcode print_string rp
       | Ast0.Array(ty,lb,size,rb) ->
 	  typeC ty; mcode print_string lb; print_option expression size;
 	  mcode print_string rb
@@ -367,6 +408,8 @@ and print_named_type ty id =
 		mcode print_string rb)
 	| _ -> typeC ty; ident id; k () in
       loop ty (function _ -> ())
+  | Ast0.ParenType(lp,ty,rp) ->
+      print_parentype (lp,ty,rp) (function _ -> ident id)
   | _ -> typeC ty; ident id
 
 and declaration d =
