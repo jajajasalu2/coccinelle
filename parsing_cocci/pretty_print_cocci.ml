@@ -403,6 +403,54 @@ and print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2) fn =
   mcode print_string rp1; mcode print_string lp1;
   parameter_list params; mcode print_string rp2
 
+and print_parentype (lp,ty,rp) fn =
+    match Ast.unwrap ty with
+     Ast.Type(_,_,fty1) ->
+      (match Ast.unwrap fty1 with
+        Ast.Pointer(ty1,star) ->
+        (match Ast.unwrap ty1 with
+         Ast.Type(_,_,fty2) ->
+          (match Ast.unwrap fty2 with
+          Ast.FunctionType(ty2,lp2,params,rp2) ->
+            fullType ty2;
+            print_space();
+            mcode print_string lp;
+            mcode print_string star;
+            fn();
+            mcode print_string rp;
+            mcode print_string lp2;
+            parameter_list params;
+            mcode print_string rp2
+          | _ -> failwith "ParenType Unparse_cocci")
+          | _ -> failwith "ParenType Unparse_cocci")
+        | Ast.Array(ty1,lb1,size1,rb1) ->
+            (match Ast.unwrap ty1 with
+              Ast.Type(_,_,fty2) ->
+              (match Ast.unwrap fty2 with
+                Ast.Pointer(ty2,star) ->
+                (match Ast.unwrap ty2 with
+                  Ast.Type(_,_,fty3) ->
+                  (match Ast.unwrap fty3 with
+                    Ast.FunctionType(ty3,lp3,params,rp3) ->
+                    fullType ty3;
+                    print_space();
+                    mcode print_string lp;
+                    mcode print_string star;
+                    fn();
+                    mcode print_string lb1;
+                    print_option expression size1;
+                    mcode print_string rb1;
+                    mcode print_string rp;
+                    mcode print_string lp3;
+                    parameter_list params;
+                    mcode print_string rp3
+	  | _ -> failwith "ParenType Unparse_cocci")
+        | _ -> failwith "ParenType Unparse_cocci")
+       | _ -> failwith "ParenType Unparse_cocci")
+      | _ -> failwith "ParenType Unparse_cocci")
+     | _ -> failwith "ParenType Unparse_cocci")
+     | _ -> failwith "ParenType Unparse_cocci"
+
 and varargs = function
   | None -> ()
   | Some (comma, ellipsis) ->
@@ -424,6 +472,13 @@ and typeC ty =
   | Ast.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
       print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2)
 	(function _ -> ())
+  | Ast.ParenType(lp,ty,rp) ->
+      print_parentype (lp,ty,rp) (function _ -> ())
+  | Ast.FunctionType(ty,lp,params,rp) ->
+      fullType ty;
+      mcode print_string lp;
+      parameter_list params;
+      mcode print_string rp
   | Ast.Array(ty,lb,size,rb) ->
       fullType ty; mcode print_string lb; print_option expression size;
       mcode print_string rb
@@ -498,6 +553,8 @@ and print_named_type ty id =
 		| _ -> failwith "complex array types not supported")
 	    | _ -> typeC ty; id(); k () in
 	  loop ty1 (function _ -> ())
+      | Ast.ParenType(lp,ty,rp) ->
+          print_parentype (lp,ty,rp) (function _ -> id())
       | _ -> fullType ty; id())
   | _ -> fullType ty; id()
 
