@@ -16,6 +16,7 @@ type 'a combiner =
      combiner_declaration : Ast_cocci.declaration -> 'a;
      combiner_field : Ast_cocci.field -> 'a;
      combiner_ann_field : Ast_cocci.annotated_field -> 'a;
+     combiner_enumdecl : Ast_cocci.enum_decl -> 'a;
      combiner_initialiser : Ast_cocci.initialiser -> 'a;
      combiner_parameter : Ast_cocci.parameterTypeDef -> 'a;
      combiner_parameter_list : Ast_cocci.parameter_list -> 'a;
@@ -70,6 +71,7 @@ val combiner :
       ((Ast_cocci.annotated_decl,'a) ccode) ->
       ((Ast_cocci.field,'a) ccode) ->
       ((Ast_cocci.annotated_field,'a) ccode) ->
+      ((Ast_cocci.enum_decl,'a) ccode) ->
       ((Ast_cocci.rule_elem,'a) ccode) ->
       ((Ast_cocci.statement,'a) ccode) ->
       ((Ast_cocci.case_line,'a) ccode) ->
@@ -91,6 +93,7 @@ type rebuilder =
       rebuilder_declaration : Ast_cocci.declaration inout;
       rebuilder_field : Ast_cocci.field inout;
       rebuilder_ann_field : Ast_cocci.annotated_field inout;
+      rebuilder_enumdecl : Ast_cocci.enum_decl inout;
       rebuilder_initialiser : Ast_cocci.initialiser inout;
       rebuilder_parameter : Ast_cocci.parameterTypeDef inout;
       rebuilder_parameter_list : Ast_cocci.parameter_list inout;
@@ -147,6 +150,7 @@ val rebuilder :
     (Ast_cocci.annotated_decl rcode) ->
     (Ast_cocci.field rcode) ->
     (Ast_cocci.annotated_field rcode) ->
+    (Ast_cocci.enum_decl rcode) ->
     (Ast_cocci.rule_elem rcode) ->
     (Ast_cocci.statement rcode) ->
     (Ast_cocci.case_line rcode) ->

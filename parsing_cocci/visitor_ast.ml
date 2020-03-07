@@ -27,6 +27,7 @@ type 'a combiner =
      combiner_declaration : Ast.declaration -> 'a;
      combiner_field : Ast.field -> 'a;
      combiner_ann_field : Ast.annotated_field -> 'a;
+     combiner_enumdecl : Ast_cocci.enum_decl -> 'a;
      combiner_initialiser : Ast.initialiser -> 'a;
      combiner_parameter : Ast.parameterTypeDef -> 'a;
      combiner_parameter_list : Ast.parameter_list -> 'a;
@@ -53,8 +54,8 @@ let combiner bind option_default
     expdotsfn paramdotsfn stmtdotsfn anndecldotsfn annfielddotsfn initdotsfn
     identfn exprfn fragfn fmtfn assignOpfn binaryOpfn ftfn tyfn initfn
     paramfn define_paramfn declfn
-    annotated_declfn fieldfn annotated_fieldfn rulefn stmtfn casefn topfn
-    anyfn =
+    annotated_declfn fieldfn annotated_fieldfn enum_declfn rulefn stmtfn
+    casefn topfn anyfn =
   let multibind l =
     let rec loop = function
 	[] -> option_default
@@ -87,6 +88,7 @@ let combiner bind option_default
   and strdotsfn all_functions k arg = k arg
   and ecdotsfn all_functions k arg = k arg
   and defpardotsfn all_functions k arg = k arg
+  and enumdecldotsfn all_functions k arg = k arg
 
   and expression_dots d = dotsfn expdotsfn expression all_functions d
   and parameter_dots d = dotsfn paramdotsfn parameterTypeDef all_functions d
@@ -95,6 +97,8 @@ let combiner bind option_default
     dotsfn anndecldotsfn annotated_decl all_functions d
   and annotated_field_dots d =
     dotsfn annfielddotsfn annotated_field all_functions d
+  and enum_decl_dots d =
+    dotsfn enumdecldotsfn enum_decl all_functions d
   and initialiser_dots d = dotsfn initdotsfn initialiser all_functions d
   and string_fragment_dots d = dotsfn strdotsfn string_fragment all_functions d
   and exec_code_dots d = dotsfn ecdotsfn exec_code all_functions d
@@ -348,7 +352,7 @@ let combiner bind option_default
       | Ast.EnumDef(ty,lb,ids,rb) ->
 	  let lty = fullType ty in
 	  let llb = string_mcode lb in
-	  let lids = expression_dots ids in
+	  let lids = enum_decl_dots ids in
 	  let lrb = string_mcode rb in
 	  multibind [lty; llb; lids; lrb]
       | Ast.StructUnionName(kind,name) ->
@@ -497,6 +501,25 @@ let combiner bind option_default
 	  multibind (List.map annotated_field decls)
       | Ast.OptField(decl) -> annotated_field decl in
     annotated_fieldfn all_functions k d
+
+  and enum_decl d =
+    let k d =
+      match Ast.unwrap d with
+	Ast.Enum(name,enum_val) ->
+          let lname = ident name in
+          (match enum_val with
+            None -> lname
+          | Some(eq,eval) ->
+              let leq = string_mcode eq in
+              let leval = expression eval in
+              multibind [lname; leq; leval])
+      | Ast.EnumComma(cm) ->
+        string_mcode cm
+      | Ast.EnumDots(dots,whncode) ->
+        let ldots = string_mcode dots in
+        let lwhncode = get_option enum_decl whncode in
+	bind ldots lwhncode in
+    enum_declfn all_functions k d
 
   and initialiser i =
     let k i =
@@ -899,6 +922,7 @@ let combiner bind option_default
       | Ast.LogicalOpTag(logop) -> option_default
       | Ast.DeclarationTag(decl) -> declaration decl
       | Ast.FieldTag(decl) -> field decl
+      | Ast.EnumDeclTag(decl) -> enum_decl decl
       | Ast.InitTag(ini) -> initialiser ini
       | Ast.StorageTag(stg) -> option_default
       | Ast.IncFileTag(stg) -> option_default
@@ -916,6 +940,7 @@ let combiner bind option_default
       | Ast.StmtDotsTag(sd) -> statement_dots sd
       | Ast.AnnDeclDotsTag(sd) -> annotated_decl_dots sd
       | Ast.AnnFieldDotsTag(sd) -> annotated_field_dots sd
+      | Ast.EnumDeclDotsTag(sd) -> enum_decl_dots sd
       | Ast.DefParDotsTag(sd) -> define_param_dots sd
       | Ast.TypeCTag(ty) -> typeC ty
       | Ast.ParamTag(param) -> parameterTypeDef param
@@ -935,6 +960,7 @@ let combiner bind option_default
       combiner_declaration = declaration;
       combiner_field = field;
       combiner_ann_field = annotated_field;
+      combiner_enumdecl = enum_decl;
       combiner_initialiser = initialiser;
       combiner_parameter = parameterTypeDef;
       combiner_parameter_list = parameter_dots;
@@ -966,6 +992,7 @@ type rebuilder =
       rebuilder_declaration : Ast.declaration inout;
       rebuilder_field : Ast.field inout;
       rebuilder_ann_field : Ast.annotated_field inout;
+      rebuilder_enumdecl : Ast_cocci.enum_decl inout;
       rebuilder_initialiser : Ast.initialiser inout;
       rebuilder_parameter : Ast.parameterTypeDef inout;
       rebuilder_parameter_list : Ast.parameter_list inout;
@@ -995,7 +1022,7 @@ let rebuilder
     expdotsfn paramdotsfn stmtdotsfn anndecldotsfn annfielddotsfn initdotsfn
     identfn exprfn fragfn fmtfn assignOpfn binaryOpfn ftfn tyfn initfn
     paramfn define_paramfn declfn annotated_declfn fieldfn annotated_fieldfn
-    rulefn stmtfn casefn topfn anyfn =
+    enum_declfn rulefn stmtfn casefn topfn anyfn =
   let get_option f = function
       Some x -> Some (f x)
     | None -> None in
@@ -1006,6 +1033,7 @@ let rebuilder
 
   let strdotsfn all_functions k arg = k arg in
   let ecdotsfn all_functions k arg = k arg in
+  let enumdecldotsfn all_functions k arg = k arg in
 
   let rec expression_dots d = dotsfn expdotsfn expression all_functions d
   and parameter_dots d = dotsfn paramdotsfn parameterTypeDef all_functions d
@@ -1014,6 +1042,8 @@ let rebuilder
     dotsfn anndecldotsfn annotated_decl all_functions d
   and annotated_field_dots d =
     dotsfn annfielddotsfn annotated_field all_functions d
+  and enum_decl_dots d =
+    dotsfn enumdecldotsfn enum_decl all_functions d
   and initialiser_dots d = dotsfn initdotsfn initialiser all_functions d
   and string_fragment_dots d = dotsfn strdotsfn string_fragment all_functions d
   and exec_code_dots d = dotsfn ecdotsfn exec_code all_functions d
@@ -1274,7 +1304,7 @@ let rebuilder
 	| Ast.EnumDef(ty,lb,ids,rb) ->
 	    let lty = fullType ty in
 	    let llb = string_mcode lb in
-	    let lids = expression_dots ids in
+	    let lids = enum_decl_dots ids in
 	    let lrb = string_mcode rb in
 	    Ast.EnumDef (lty, llb, lids, lrb)
 	| Ast.StructUnionName(kind,name) ->
@@ -1420,6 +1450,27 @@ let rebuilder
 	    Ast.ConjField(List.map annotated_field decls)
 	| Ast.OptField(decl) -> Ast.OptField(annotated_field decl)) in
     annotated_fieldfn all_functions k d
+
+  and enum_decl d =
+    let k d =
+      Ast.rewrap d
+        (match Ast.unwrap d with
+         Ast.Enum(name,enum_val) ->
+            let lname = ident name in
+            (match enum_val with
+              None -> Ast.Enum(lname,None)
+            | Some(eq,eval) ->
+                let leq = string_mcode eq in
+                let leval = expression eval in
+                Ast.Enum(lname,Some(leq,leval)))
+        | Ast.EnumComma(cm) ->
+          let lcm = string_mcode cm in
+          Ast.EnumComma(lcm)
+	| Ast.EnumDots(dots,whncode) ->
+	  let ldots = string_mcode dots in
+	  let lwhncode = get_option enum_decl whncode in
+	  Ast.EnumDots(ldots, lwhncode)) in
+    enum_declfn all_functions k d
 
   and initialiser i =
     let k i =
@@ -1851,6 +1902,7 @@ let rebuilder
       | Ast.InitTag(decl) -> Ast.InitTag(initialiser decl)
       | Ast.DeclarationTag(decl) -> Ast.DeclarationTag(declaration decl)
       | Ast.FieldTag(decl) -> Ast.FieldTag(field decl)
+      | Ast.EnumDeclTag(decl) -> Ast.EnumDeclTag(enum_decl decl)
       | Ast.StorageTag(stg) as x -> x
       | Ast.IncFileTag(stg) as x -> x
       | Ast.Rule_elemTag(rule) -> Ast.Rule_elemTag(rule_elem rule)
@@ -1868,6 +1920,7 @@ let rebuilder
       | Ast.StmtDotsTag(sd) -> Ast.StmtDotsTag(statement_dots sd)
       | Ast.AnnDeclDotsTag(sd) -> Ast.AnnDeclDotsTag(annotated_decl_dots sd)
       | Ast.AnnFieldDotsTag(sd) -> Ast.AnnFieldDotsTag(annotated_field_dots sd)
+      | Ast.EnumDeclDotsTag(sd) -> Ast.EnumDeclDotsTag(enum_decl_dots sd)
       | Ast.DefParDotsTag(sd) -> Ast.DefParDotsTag(define_param_dots sd)
       | Ast.TypeCTag(ty) -> Ast.TypeCTag(typeC ty)
       | Ast.ParamTag(param) -> Ast.ParamTag(parameterTypeDef param)
@@ -1887,6 +1940,7 @@ let rebuilder
       rebuilder_declaration = declaration;
       rebuilder_field = field;
       rebuilder_ann_field = annotated_field;
+      rebuilder_enumdecl = enum_decl;
       rebuilder_initialiser = initialiser;
       rebuilder_parameter = parameterTypeDef;
       rebuilder_parameter_list = parameter_dots;

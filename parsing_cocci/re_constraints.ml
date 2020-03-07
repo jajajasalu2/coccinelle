@@ -43,7 +43,7 @@ let disj_free re =
     mcode mcode
     donothing donothing donothing donothing donothing donothing ident
     expr donothing donothing donothing donothing ty donothing
-    donothing donothing donothing decl donothing donothing ann_field
+    donothing donothing donothing decl donothing donothing ann_field donothing
     rule_elem statement donothing donothing donothing in
   try Hashtbl.find disj_free_table re
   with Not_found ->
@@ -90,7 +90,7 @@ let ok_for_all_rule_elems cstr minirules =
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
-      rule_elem donothing donothing donothing donothing in
+      donothing rule_elem donothing donothing donothing donothing in
   List.for_all v.V.combiner_top_level minirules
 
 let update_for_all_rule_elems cstr minirules =
@@ -112,7 +112,7 @@ let update_for_all_rule_elems cstr minirules =
       donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing
-      donothing donothing donothing donothing
+      donothing donothing donothing donothing donothing
       donothing rule_elem donothing donothing donothing donothing in
   List.map v.V.rebuilder_top_level minirules
 

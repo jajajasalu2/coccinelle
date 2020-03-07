@@ -252,7 +252,7 @@ let do_cleanup =
     donothing donothing donothing donothing donothing donothing (* dots *)
     ident expression string_fragment string_format assignOp
     binaryOp fullType typeC initialiser parameterTypeDef define_param
-    declaration donothing field ann_field
+    declaration donothing field ann_field donothing
     rule_elem statement donothing donothing donothing
 
 let cleanup_rules rules d =
