@@ -971,6 +971,8 @@ let root_equal e1 e2 =
   | (Ast0.DotsStmtTag(d1),Ast0.DotsStmtTag(d2)) -> dots equal_statement d1 d2
   | (Ast0.DotsDeclTag(d1),Ast0.DotsDeclTag(d2)) -> dots equal_declaration d1 d2
   | (Ast0.DotsFieldTag(d1),Ast0.DotsFieldTag(d2)) -> dots equal_field d1 d2
+  | (Ast0.DotsEnumDeclTag(d1),Ast0.DotsEnumDeclTag(d2)) ->
+      dots equal_field d1 d2
   | (Ast0.DotsCaseTag(d1),Ast0.DotsCaseTag(d2)) -> dots equal_case_line d1 d2
   | (Ast0.DotsDefParamTag(d1),Ast0.DotsDefParamTag(d2)) ->
       dots equal_define_param d1 d2

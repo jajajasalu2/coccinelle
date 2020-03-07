@@ -40,6 +40,7 @@ type 'a combiner =
      combiner_statement_dots : Ast.statement Ast.dots -> 'a;
      combiner_anndecl_dots : Ast.annotated_decl Ast.dots -> 'a;
      combiner_annfield_dots : Ast.annotated_field Ast.dots -> 'a;
+     combiner_enumdecl_dots : Ast.enum_decl Ast.dots -> 'a;
      combiner_initialiser_dots : Ast.initialiser Ast.dots -> 'a}
 
 type ('mc,'a) cmcode = 'a combiner -> 'mc Ast_cocci.mcode -> 'a
@@ -51,7 +52,8 @@ let combiner bind option_default
     unary_mcodefn arithop_mcodefn logicalop_mcodefn
     cv_mcodefn sign_mcodefn struct_mcodefn storage_mcodefn
     inc_file_mcodefn
-    expdotsfn paramdotsfn stmtdotsfn anndecldotsfn annfielddotsfn initdotsfn
+    expdotsfn paramdotsfn stmtdotsfn anndecldotsfn annfielddotsfn
+    enumdecldotsfn initdotsfn
     identfn exprfn fragfn fmtfn assignOpfn binaryOpfn ftfn tyfn initfn
     paramfn define_paramfn declfn
     annotated_declfn fieldfn annotated_fieldfn enum_declfn rulefn stmtfn
@@ -88,7 +90,6 @@ let combiner bind option_default
   and strdotsfn all_functions k arg = k arg
   and ecdotsfn all_functions k arg = k arg
   and defpardotsfn all_functions k arg = k arg
-  and enumdecldotsfn all_functions k arg = k arg
 
   and expression_dots d = dotsfn expdotsfn expression all_functions d
   and parameter_dots d = dotsfn paramdotsfn parameterTypeDef all_functions d
@@ -973,6 +974,7 @@ let combiner bind option_default
       combiner_statement_dots = statement_dots;
       combiner_anndecl_dots = annotated_decl_dots;
       combiner_annfield_dots = annotated_field_dots;
+      combiner_enumdecl_dots = enum_decl_dots;
       combiner_initialiser_dots = initialiser_dots} in
   all_functions
 
@@ -1004,6 +1006,7 @@ type rebuilder =
       rebuilder_statement_dots : Ast.statement Ast.dots inout;
       rebuilder_anndecl_dots : Ast.annotated_decl Ast.dots inout;
       rebuilder_annfield_dots : Ast.annotated_field Ast.dots inout;
+      rebuilder_enumdecl_dots : Ast.enum_decl Ast.dots inout;
       rebuilder_initialiser_dots : Ast.initialiser Ast.dots inout;
       rebuilder_define_param_dots : Ast.define_param Ast.dots inout;
       rebuilder_define_param : Ast.define_param inout;
@@ -1019,7 +1022,8 @@ let rebuilder
     fix_mcode unary_mcode
     arithop_mcode logicalop_mcode cv_mcode sign_mcode struct_mcode
     storage_mcode inc_file_mcode
-    expdotsfn paramdotsfn stmtdotsfn anndecldotsfn annfielddotsfn initdotsfn
+    expdotsfn paramdotsfn stmtdotsfn anndecldotsfn annfielddotsfn
+    enumdecldotsfn initdotsfn
     identfn exprfn fragfn fmtfn assignOpfn binaryOpfn ftfn tyfn initfn
     paramfn define_paramfn declfn annotated_declfn fieldfn annotated_fieldfn
     enum_declfn rulefn stmtfn casefn topfn anyfn =
@@ -1033,7 +1037,6 @@ let rebuilder
 
   let strdotsfn all_functions k arg = k arg in
   let ecdotsfn all_functions k arg = k arg in
-  let enumdecldotsfn all_functions k arg = k arg in
 
   let rec expression_dots d = dotsfn expdotsfn expression all_functions d
   and parameter_dots d = dotsfn paramdotsfn parameterTypeDef all_functions d
@@ -1952,6 +1955,7 @@ let rebuilder
       rebuilder_statement_dots = statement_dots;
       rebuilder_anndecl_dots = annotated_decl_dots;
       rebuilder_annfield_dots = annotated_field_dots;
+      rebuilder_enumdecl_dots = enum_decl_dots;
       rebuilder_initialiser_dots = initialiser_dots;
       rebuilder_define_param_dots = define_param_dots;
       rebuilder_define_param = define_param;

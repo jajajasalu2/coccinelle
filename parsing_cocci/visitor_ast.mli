@@ -29,6 +29,7 @@ type 'a combiner =
      combiner_statement_dots : Ast_cocci.statement Ast_cocci.dots -> 'a;
      combiner_anndecl_dots : Ast_cocci.annotated_decl Ast_cocci.dots -> 'a;
      combiner_annfield_dots : Ast_cocci.annotated_field Ast_cocci.dots -> 'a;
+     combiner_enumdecl_dots : Ast_cocci.enum_decl Ast_cocci.dots -> 'a;
      combiner_initialiser_dots : Ast_cocci.initialiser Ast_cocci.dots -> 'a}
 
 type ('mc,'a) cmcode = 'a combiner -> 'mc Ast_cocci.mcode -> 'a
@@ -55,6 +56,7 @@ val combiner :
       ((Ast_cocci.statement Ast_cocci.dots,'a) ccode) ->
       ((Ast_cocci.annotated_decl Ast_cocci.dots,'a) ccode) ->
       ((Ast_cocci.annotated_field Ast_cocci.dots,'a) ccode) ->
+      ((Ast_cocci.enum_decl Ast_cocci.dots,'a) ccode) ->
       ((Ast_cocci.initialiser Ast_cocci.dots,'a) ccode) ->
       ((Ast_cocci.ident,'a) ccode) ->
       ((Ast_cocci.expression,'a) ccode) ->
@@ -105,6 +107,7 @@ type rebuilder =
       rebuilder_statement_dots : Ast_cocci.statement Ast_cocci.dots inout;
       rebuilder_anndecl_dots : Ast_cocci.annotated_decl Ast_cocci.dots inout;
       rebuilder_annfield_dots : Ast_cocci.annotated_field Ast_cocci.dots inout;
+      rebuilder_enumdecl_dots : Ast_cocci.enum_decl Ast_cocci.dots inout;
       rebuilder_initialiser_dots : Ast_cocci.initialiser Ast_cocci.dots inout;
       rebuilder_define_param_dots: Ast_cocci.define_param Ast_cocci.dots inout;
       rebuilder_define_param : Ast_cocci.define_param inout;
@@ -134,6 +137,7 @@ val rebuilder :
     (Ast_cocci.statement Ast_cocci.dots rcode) ->
     (Ast_cocci.annotated_decl Ast_cocci.dots rcode) ->
     (Ast_cocci.annotated_field Ast_cocci.dots rcode) ->
+    (Ast_cocci.enum_decl Ast_cocci.dots rcode) ->
     (Ast_cocci.initialiser Ast_cocci.dots rcode) ->
     (Ast_cocci.ident rcode) ->
     (Ast_cocci.expression rcode) ->
