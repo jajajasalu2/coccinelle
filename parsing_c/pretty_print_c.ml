@@ -682,7 +682,7 @@ and pp_string_format (e,ii) =
                first var, we print the whole type *)
 
 	    (match x with
-	      (Simple (nameopt, typ)), iivirg ->
+	      (Simple (nameopt, typ, attrs, endattrs)), iivirg ->
               (* first var cannot have a preceding ',' *)
 		assert (List.length iivirg = 0);
 		let identinfo =
@@ -690,10 +690,11 @@ and pp_string_format (e,ii) =
 		  | None -> None
                   | Some name -> Some (function _ -> pp_name name)
                 in
-		pp_type_with_ident identinfo None typ Ast_c.noattr
-		  Ast_c.noattr;
+		pp_type_with_ident identinfo None typ attrs
+                  endattrs;
 
-	    | (BitField (nameopt, typ, iidot, expr)), iivirg ->
+	    | (BitField (nameopt, typ, iidot, expr, attrs, endattrs)),
+               iivirg ->
                       (* first var cannot have a preceding ',' *)
 		assert (List.length iivirg = 0);
 		(match nameopt with
@@ -701,7 +702,7 @@ and pp_string_format (e,ii) =
 		    pp_type typ;
 		| Some name ->
 		    pp_type_with_ident (Some (function _ -> pp_name name))
-		      None typ Ast_c.noattr Ast_c.noattr;
+		      None typ attrs endattrs;
 		    );
                 pr_elem iidot;
 		pp_expression expr
@@ -710,7 +711,7 @@ and pp_string_format (e,ii) =
 
                       (* for other vars *)
 	    xs +> List.iter (function
-	      | (Simple (nameopt, typ)), iivirg ->
+	      | (Simple (nameopt, typ, attrs, endattrs)), iivirg ->
 		  iivirg +> List.iter pr_elem;
 		  let identinfo =
 		    match nameopt with
@@ -720,13 +721,14 @@ and pp_string_format (e,ii) =
 		  pp_type_with_ident_rest identinfo typ
 		    Ast_c.noattr Ast_c.noattr
 
-	      | (BitField (nameopt, typ, iidot, expr)), iivirg ->
+	      | (BitField (nameopt, typ, iidot, expr, attrs, endattrs)),
+                 iivirg ->
 		  iivirg +> List.iter pr_elem;
 		  (match nameopt with
 		  | Some name ->
 		      pp_type_with_ident_rest
 			(Some (function _ -> pp_name name))
-			typ Ast_c.noattr Ast_c.noattr;
+			typ attrs endattrs;
 		      pr_elem iidot;
 		      pp_expression expr
 		  | None ->
