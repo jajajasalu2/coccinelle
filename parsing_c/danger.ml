@@ -46,17 +46,22 @@ let undanger_onedecl (onedecl,_ii) =
 
 let undanger_fieldkind (fieldkind,_ii) =
   match fieldkind with
-    Ast_c.Simple(None,_) | Ast_c.BitField(None,_,_,_) ->
+    Ast_c.Simple(None,_,_,_) | Ast_c.BitField(None,_,_,_,_,_) ->
       (* no name implies nothing to do *)
       ()
-  | Ast_c.Simple(Some name,ft) ->
+  | Ast_c.Simple(Some name,ft,attrs,endattrs) ->
       Visitor_c.vk_name undanger name;
-      undanger_type ft
-  | Ast_c.BitField(Some name,ft,ii,ce) ->
+      undanger_type ft;
+      attrs +> List.iter (Visitor_c.vk_attribute undanger);
+      endattrs +> List.iter (Visitor_c.vk_attribute undanger)
+  | Ast_c.BitField(Some name,ft,ii,ce,attrs,endattrs) ->
       Visitor_c.vk_name undanger name;
       undanger_type ft;
       Visitor_c.vk_info undanger ii;
-      Visitor_c.vk_expr undanger ce
+      Visitor_c.vk_expr undanger ce;
+      attrs +> List.iter (Visitor_c.vk_attribute undanger);
+      endattrs +> List.iter (Visitor_c.vk_attribute undanger)
+
 
 let add_danger xs =
   let decl_function (k,bigf) decl =
