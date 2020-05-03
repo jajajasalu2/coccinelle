@@ -453,12 +453,12 @@ let (type_field:
       | DeclarationField (FieldDeclList (onefield_multivars, iiptvirg)) ->
           onefield_multivars +> List.iter (fun (fieldkind, iicomma) ->
             match fieldkind with
-            | Simple (Some name, t) ->
+            | Simple (Some name, t, _, _) ->
                 let s = Ast_c.str_of_name name in
                 if s = fld
                 then Common.push2 t res
 
-            | BitField (Some name, t, _, align) ->
+            | BitField (Some name, t, _, align, _, _) ->
                 let s = Ast_c.str_of_name name in
                 if s = fld
                 then
@@ -466,7 +466,7 @@ let (type_field:
 		    (rewrap_typeC t (FieldType (t, name, Some align))) res
                 else ()
 
-            | Simple (None, t) ->
+            | Simple (None, t, _, _) ->
                 (match Ast_c.unwrap_typeC t with
 
                 (* union *)
