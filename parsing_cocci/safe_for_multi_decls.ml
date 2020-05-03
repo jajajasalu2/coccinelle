@@ -143,10 +143,11 @@ let field r k e =
   | Ast.NoStorage -> {e with Ast.safe_for_multi_decls = Ast.NoStorage}
   | Ast.Unsafe ->
     match Ast.unwrap e with
-      Ast.Field(ty,_,_bf,sem) ->
+      Ast.Field(ty,_,attr,_bf,sem) ->
 	let ft_modif = contains_modif ty in
+	let attr_modif = List.exists (mcode ()) attr in
 	let sem_modif = mcode () sem in
-	if not(ft_modif || sem_modif)
+	if not(ft_modif || attr_modif || sem_modif)
 	then {e with Ast.safe_for_multi_decls = Ast.Safe}
 	else e
     | _ -> e
