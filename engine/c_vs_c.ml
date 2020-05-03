@@ -227,20 +227,31 @@ and typeC tya tyb =
                     let iix = iia in
                     acc2 >>= (fun xs ->
                       match fielda, fieldb with
-                      | Simple (nameaopt, ta), Simple (namebopt, tb) ->
+                      | Simple (nameaopt, ta, attrsa, endattrsa),
+                        Simple (namebopt, tb, attrsb, endattrsb) ->
 
 
-                          same_s nameaopt namebopt >&&>
+                          (same_s nameaopt namebopt &&
+                           attrsa = attrsb &&
+                           endattrsa = endattrsb) >&&>
                           fullType ta tb >>= (fun tx ->
-                            return (((Simple (nameaopt, tx)), iix)::xs)
+                            return
+                              (((Simple
+                                  (nameaopt, tx, attrsa, endattrsa)),iix)::xs)
                           )
 
-                      | BitField (nameopta, ta, infoa, ea),
-                        BitField (nameoptb, tb, infob, eb) ->
+                      | BitField (nameopta, ta, infoa, ea, attrsa, endattrsa),
+                        BitField (nameoptb, tb, infob, eb, attrsb, endattrsb) ->
                           let infox = infoa in
-                          (same_s nameopta nameoptb && ea = eb) >&&>
+                          (same_s nameopta nameoptb &&
+                           ea = eb &&
+                           attrsa = attrsb &&
+                           endattrsa = endattrsb) >&&>
                           fullType ta tb >>= (fun tx ->
-                            return (((BitField (nameopta,tx,infox,ea)), iix)::xs)
+                            return
+                              (((BitField
+                                  (nameopta,tx,infox,ea,attrsa,endattrsa)),
+                                 iix)::xs)
                           )
                       | _,_ -> fail
                     )
