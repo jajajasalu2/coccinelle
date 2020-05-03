@@ -2854,24 +2854,27 @@ and onefield = fun allminus decla (declb, iiptvirgb) ->
     | None, Some _ | Some _, None -> fail in
  X.all_bound (A.get_inherited decla) >&&>
  match A.unwrap decla, declb with
-   A.Field (typa, ida, None, ptvirga),
-   (B.Simple (nameidb, typb), iivirg) ->
+   A.Field (typa, ida, attrsa, None, ptvirga),
+   (B.Simple (nameidb, typb, attrsb, endattrsb), iivirg) ->
      match_option (ident_cpp DontKnow) ida nameidb >>= (fun ida nameidb ->
      tokenf ptvirga iiptvirgb >>= (fun ptvirga iiptvirgb ->
+     attribute_list allminus attrsa attrsb >>= (fun attrsa attrsb ->
      fullType typa typb >>= (fun typa typb ->
        return (
-       (A.Field (typa, ida, None, ptvirga) +>  A.rewrap decla),
-       ((B.Simple (nameidb, typb),iivirg), iiptvirgb)))))
- | A.Field (typa, ida, Some (ca, ea), ptvirga),
-     (B.BitField (nameidb, typb, info, eb), iivirg) ->
+       (A.Field (typa, ida, attrsa, None, ptvirga) +>  A.rewrap decla),
+       ((B.Simple (nameidb, typb, attrsb, endattrsb),iivirg), iiptvirgb))))))
+ | A.Field (typa, ida, attrsa, Some (ca, ea), ptvirga),
+     (B.BitField (nameidb, typb, info, eb, attrsb, endattrsb), iivirg) ->
      match_option (ident_cpp DontKnow) ida nameidb >>= (fun ida nameidb ->
      tokenf ptvirga iiptvirgb >>= (fun ptvirga iiptvirgb ->
+     attribute_list allminus attrsa attrsb >>= (fun attrsa attrsb ->
      fullType typa typb >>= (fun typa typb ->
      tokenf ca info >>= (fun ca info ->
      expression ea eb >>= (fun ea eb ->
        return (
-       (A.Field (typa, ida, Some (ca, ea), ptvirga) +>  A.rewrap decla),
-       ((B.BitField (nameidb, typb, info, eb),iivirg), iiptvirgb)))))))
+       (A.Field (typa, ida, attrsa, Some (ca, ea), ptvirga) +>  A.rewrap decla),
+       ((B.BitField (nameidb, typb, info, eb, attrsb, endattrsb),iivirg),
+         iiptvirgb))))))))
 
    | _, _ ->
        fail
