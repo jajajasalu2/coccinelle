@@ -608,12 +608,14 @@ and field d =
     Ast.MetaField(name,_,_,_)
   | Ast.MetaFieldList(name,_,_,_,_) ->
       mcode print_meta name
-  | Ast.Field(ty,id,bf,sem) ->
+  | Ast.Field(ty,id,attr,bf,sem) ->
       begin
 	match id with
 	  None -> fullType ty
 	| Some id -> print_named_type ty (fun _ -> ident id);
       end;
+      (if not (attr = []) then print_string " ");
+      print_between print_space (mcode print_string) attr;
       let bitfield (c, e) =
 	mcode print_string c;
 	expression e in
