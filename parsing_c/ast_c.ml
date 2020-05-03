@@ -268,9 +268,11 @@ and fullType = typeQualifier * typeC
            * can cast into int so enum too, ...
            *)
            and fieldkind =
-             | Simple   of name option * fullType
+             | Simple   of name option * fullType *
+                 attribute list * attribute list (* end attributes *)
              | BitField of name option * fullType *
-                 info (* : *) * constExpression
+                 info (* : *) * constExpression *
+                 attribute list * attribute list (* end attributes *)
               (* fullType => BitFieldInt | BitFieldUnsigned *)
 
 
@@ -1321,8 +1323,8 @@ let s_of_inc_file_bis inc_file =
 
 let fieldname_of_fieldkind fieldkind =
   match fieldkind with
-  | Simple (sopt, ft) -> sopt
-  | BitField (sopt, ft, info, expr) -> sopt
+  | Simple (sopt, ft, attrs, endattrs) -> sopt
+  | BitField (sopt, ft, info, expr, attrs, endattrs) -> sopt
 
 
 let s_of_attr attr =
