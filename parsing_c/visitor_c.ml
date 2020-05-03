@@ -669,14 +669,18 @@ and vk_struct_fieldkinds = fun bigf onefield_multivars ->
   onefield_multivars +> List.iter (fun (field, iicomma) ->
     iif iicomma;
     match field with
-    | Simple (nameopt, t) ->
+    | Simple (nameopt, t, attrs, endattrs) ->
         Common.do_option (vk_name bigf) nameopt;
         vk_type bigf t;
-    | BitField (nameopt, t, info, expr) ->
+        attrs +> List.iter (vk_attribute bigf);
+        endattrs +> List.iter (vk_attribute bigf);
+    | BitField (nameopt, t, info, expr, attrs, endattrs) ->
         Common.do_option (vk_name bigf) nameopt;
         vk_info bigf info;
         vk_expr bigf expr;
-        vk_type bigf t
+        vk_type bigf t;
+        attrs +> List.iter (vk_attribute bigf);
+        endattrs +> List.iter (vk_attribute bigf);
   )
 
 
@@ -1567,14 +1571,18 @@ and vk_struct_fieldkinds_s = fun bigf onefield_multivars ->
 
   onefield_multivars +> List.map (fun (field, iicomma) ->
     (match field with
-    | Simple (nameopt, t) ->
+    | Simple (nameopt, t, attrs, endattrs) ->
         Simple (Common.map_option (vk_name_s bigf) nameopt,
-               vk_type_s bigf t)
-    | BitField (nameopt, t, info, expr) ->
+               vk_type_s bigf t,
+               attrs +> List.map (vk_attribute_s bigf),
+               attrs +> List.map (vk_attribute_s bigf))
+    | BitField (nameopt, t, info, expr, attrs, endattrs) ->
         BitField (Common.map_option (vk_name_s bigf) nameopt,
                  vk_type_s bigf t,
                  vk_info_s bigf info,
-                 vk_expr_s bigf expr)
+                 vk_expr_s bigf expr,
+                 attrs +> List.map (vk_attribute_s bigf),
+                 endattrs +> List.map (vk_attribute_s bigf))
     ), iif iicomma
   )
 
