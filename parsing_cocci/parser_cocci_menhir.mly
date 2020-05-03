@@ -1132,16 +1132,20 @@ struct_decl_one:
 	{ let (mids,code) = t in
 	Ast0.wrap
 	  (Ast0.ConjField(P.id2mcode lp,code,mids, P.id2mcode rp)) }
-    | t=ctype d=direct_decl_option(disj_ident) bf=struct_bitfield? pv=TPtVirg
+    | t=ctype d=direct_decl_option(disj_ident)
+         ar=attr_list
+         bf=struct_bitfield?
+         pv=TPtVirg
 	 { let (id,fn) = d in
-	 Ast0.wrap(Ast0.Field(fn t,id,bf,P.clt2mcode ";" pv)) }
+	 Ast0.wrap(Ast0.Field(fn t,id,ar,bf,P.clt2mcode ";" pv)) }
     | cv=ioption(const_vol) i=pure_ident_or_symbol
       d=direct_decl_option(disj_ident)
+         ar=attr_list
 	 bf=struct_bitfield?
 	 pv=TPtVirg
 	 { let (id,fn) = d in
 	 let idtype = P.make_cv cv (Ast0.wrap (Ast0.TypeName(P.id2mcode i))) in
-	 Ast0.wrap(Ast0.Field(fn idtype,id,bf,P.clt2mcode ";" pv)) }
+	 Ast0.wrap(Ast0.Field(fn idtype,id,ar,bf,P.clt2mcode ";" pv)) }
 
 struct_bitfield:
    c=TDotDot e=expr { (P.clt2mcode ":" c, e) }
