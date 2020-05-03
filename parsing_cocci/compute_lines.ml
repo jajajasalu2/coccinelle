@@ -790,13 +790,14 @@ and field d =
       let name = normal_mcode name in
       let ln = promote_mcode name in
       mkres d (Ast0.MetaFieldList(name,a,b,c)) ln ln
-  | Ast0.Field(ty,id,bf,sem) ->
+  | Ast0.Field(ty,id,attr,bf,sem) ->
       let ty = typeC ty in
       let id = Common.map_option ident id in
+      let attr = List.map normal_mcode attr in
       let bitfield (c, e) = (normal_mcode c, expression e) in
       let bf = Common.map_option bitfield bf in
       let sem = normal_mcode sem in
-      mkres d (Ast0.Field(ty,id,bf,sem)) ty (promote_mcode sem)
+      mkres d (Ast0.Field(ty,id,attr,bf,sem)) ty (promote_mcode sem)
   | Ast0.DisjField(starter,decls,mids,ender) ->
       do_disj d starter decls mids ender field
 	(fun starter decls mids ender ->
