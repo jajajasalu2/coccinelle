@@ -517,18 +517,19 @@ let combiner bind option_default
       match Ast.unwrap d with
 	Ast.MetaField(name,_,_,_) | Ast.MetaFieldList(name,_,_,_,_) ->
 	  meta_mcode name
-      | Ast.Field(ty,id,bf,sem) ->
+      | Ast.Field(ty,id,attr,bf,sem) ->
 	  let lid =
 	    match id with
 	      None -> fullType ty
 	    | Some id -> named_type ty id in
+	  let lattr = multibind (List.map string_mcode attr) in
 	  let bitfield (c, e) =
 	    let lc = string_mcode c in
 	    let le = expression e in
 	    [lc; le] in
 	  let lbf = Common.default [] bitfield bf in
 	  let lsem = string_mcode sem in
-	  multibind ([lid] @ lbf @ [lsem]) in
+          multibind ([lid; lattr] @ lbf @ [lsem]) in
     fieldfn all_functions k d
 
   and annotated_field d =
@@ -1482,16 +1483,17 @@ let rebuilder
 	| Ast.MetaFieldList(name,lenname_inh,constraints,keep,inherited) ->
 	    Ast.MetaFieldList
 	      (meta_mcode name,lenname_inh,constraints,keep,inherited)
-	| Ast.Field(ty,id,bf,sem) ->
+	| Ast.Field(ty,id,attr,bf,sem) ->
 	    let lty = fullType ty in
 	    let lid = Common.map_option ident id in
+	    let lattr = List.map string_mcode attr in
 	    let bitfield (c, e) =
 	      let lc = string_mcode c in
 	      let le = expression e in
 	      (lc, le) in
 	    let lbf = Common.map_option bitfield bf in
 	    let lsem = string_mcode sem in
-	    Ast.Field(lty, lid, lbf, lsem)) in
+	    Ast.Field(lty, lid, lattr, lbf, lsem)) in
     fieldfn all_functions k d
 
   and annotated_field d =
