@@ -1860,7 +1860,7 @@ field_declaration:
 
        let iistart = Ast_c.fakeInfo () in (* for parallelism with DeclList *)
        FieldDeclList ($2 +> (List.map (fun (f, iivirg) ->
-         f returnType, iivirg))
+         f returnType attrs $3, iivirg))
                          ,[$4;iistart])
          (* don't need to check if typedef or func initialised cos
           * grammar don't allow typedef nor initialiser in struct
@@ -1876,7 +1876,8 @@ field_declaration:
        then internal_error "parsing don't allow this";
 
        let iistart = Ast_c.fakeInfo () in (* for parallelism with DeclList *)
-       FieldDeclList ([(Simple (None, returnType)) , []], [$3;iistart])
+       FieldDeclList
+         ([(Simple (None, returnType, attrs, $2)) , []], [$3;iistart])
      }
 
 
@@ -1885,11 +1886,14 @@ field_declaration:
 
 struct_declarator:
  | declaratorsd
-     { (fun x -> Simple   (Some (fst $1), (snd $1) x)) }
+     { let (attrs, d) = $1 in
+       (fun x a1 a2 ->
+          Simple   (Some (fst d), (snd d) x, attrs @ a1, a2)) }
  | dotdot const_expr2
-     { (fun x -> BitField (None, x, $1, $2)) }
+     { (fun x a1 a2 -> BitField (None, x, $1, $2, a1, a2)) }
  | declaratorsd dotdot const_expr2
-     { (fun x -> BitField (Some (fst $1), ((snd $1) x), $2, $3)) }
+     { let (attrs, d) = $1 in
+       (fun x a1 a2 -> BitField (Some (fst d), ((snd d) x), $2, $3, a1, a2)) }
 
 
 /*(*----------------------------*)*/
@@ -1897,10 +1901,9 @@ struct_declarator:
 /*(*----------------------------*)*/
 declaratorsd:
  | declarator
-     { let (attr,dec) = $1 in (* attr ignored *)
-       (*also ? LP.add_ident (fst (fst dec)); *) dec }
+     { $1 (*also ? LP.add_ident (fst (fst dec)); *) }
  /*(* gccext: *)*/
- | declarator attributes   { let (attr,dec) = $1 in dec }
+ | declarator attributes   { let (attrs,dec) = $1 in (attrs @ $2, dec) }
 
 
 
