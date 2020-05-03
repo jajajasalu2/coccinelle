@@ -989,12 +989,14 @@ and field d =
 	    Ast_c.MetaFieldListVal f ->
 	      print_between force_newline pretty_print_c.Pretty_print_c.field f
 	  | _ -> error name d "field list value expected")
-  | Ast.Field(ty,id,bf,sem) ->
+  | Ast.Field(ty,id,attr,bf,sem) ->
       begin
 	match id with
 	  None -> fullType ty
 	| Some id -> print_named_type ty (fun _ -> ident id)
       end;
+      (if not (attr = []) then pr_space());
+      print_between pr_space (mcode print_string) attr;
       let bitfield (c, e) =
 	mcode print_string c;
 	expression e in
