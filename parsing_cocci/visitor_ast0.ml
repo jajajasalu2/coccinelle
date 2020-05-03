@@ -696,20 +696,22 @@ let visitor mode bind option_default
 	| Ast0.MetaFieldList(name,lenname,constraints,pure) ->
 	    let (n,name) = meta_mcode name in
 	    (n,Ast0.MetaFieldList(name,lenname,constraints,pure))
-	| Ast0.Field(ty,id,bf,sem) ->
+	| Ast0.Field(ty,id,attr,bf,sem) ->
 	    let ((ty_id_n,ty),id) =
 	      match id with
 		None -> (typeC ty, None)
 	      | Some id ->
 		  let (ty, id) = named_type ty id in
 		  (ty, Some id) in
+	    let (attr_n,attr) = map_split_bind string_mcode attr in
 	    let bitfield (c, e) =
 	      let (c_n, c) = string_mcode c in
 	      let (e_n, e) = expression e in
 	      ([c_n; e_n], Some (c, e)) in
 	    let (bf_n,bf) = Common.default ([], None) bitfield bf in
 	    let (sem_n,sem) = string_mcode sem in
-	    (multibind ([ty_id_n] @ bf_n @ [sem_n]), Ast0.Field(ty,id,bf,sem))
+            (multibind ([ty_id_n; attr_n] @ bf_n @ [sem_n]),
+             Ast0.Field(ty,id,attr,bf,sem))
 	| Ast0.DisjField(starter,decls,mids,ender) ->
 	    do_disj starter decls mids ender field
 	      (fun starter decls mids ender ->
