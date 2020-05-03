@@ -1030,7 +1030,8 @@ let match_maker checks_needed context_required whencode_allowed =
 	if not(checks_needed) || not(context_required) || is_context d
 	then
 	  match (up,Ast0.unwrap d) with
-	    (Ast0.Field(tya,ida,bfa,sc1),Ast0.Field(tyb,idb,bfb,sc)) ->
+	    (Ast0.Field(tya,ida,attra,bfa,sc1),
+             Ast0.Field(tyb,idb,attrb,bfb,sc)) ->
 	      let match_option_ident ida idb =
 		match ida, idb with
 		  Some ida, Some idb -> [match_ident ida idb]
@@ -1042,11 +1043,16 @@ let match_maker checks_needed context_required whencode_allowed =
 		    [check_mcode ca cb; match_expr ea eb]
 		| Some _, None | None, Some _ -> [return false]
 		| None, None -> [] in
-	      conjunct_many_bindings
-		([check_mcode sc1 sc;
-		  match_typeC tya tyb]
-		 @ match_option_ident ida idb
-		 @ match_bitfield bfa bfb)
+	      if (List.length attra = List.length attrb &&
+                 List.fold_left2 (fun p a b -> p && mcode_equal a b) true
+                   attra attrb)
+              then
+	        conjunct_many_bindings
+		  ([check_mcode sc1 sc;
+		    match_typeC tya tyb]
+		   @ match_option_ident ida idb
+		   @ match_bitfield bfa bfb)
+              else return false
 	  | (Ast0.DisjField(_,declsa,_,_),_)
 	  | (Ast0.ConjField(_,declsa,_,_),_) ->
 	      failwith "not allowed in the pattern of an isomorphism"
