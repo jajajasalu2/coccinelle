@@ -312,7 +312,7 @@ and field context old_metas table minus d =
   | Ast0.MetaFieldList(name,len,_,_) ->
       check_table table minus name;
       check_len table minus len
-  | Ast0.Field(ty,id,bf,sem) ->
+  | Ast0.Field(ty,id,attr,bf,sem) ->
       typeC old_metas table minus ty;
       Common.do_option (ident context old_metas table minus) id;
       let bitfield (c, e) = expression context old_metas table minus e in
