@@ -99,8 +99,9 @@ module Ast_c :
         FieldDeclList of fieldkind wrap2 list wrap
     and fieldkind =
       Ast_c.fieldkind =
-        Simple of name option * fullType
-      | BitField of name option * fullType * info * constExpression
+        Simple of name option * fullType * attribute list * attribute list
+      | BitField of name option * fullType * info * constExpression *
+                attribute list * attribute list
     and enumType = oneEnumType wrap2 list
     and oneEnumType = name * (info * constExpression) option
     and functionType = fullType * (parameterType wrap2 list * bool wrap)
@@ -2785,7 +2786,8 @@ module Ast_cocci :
     and annotated_decl = base_annotated_decl wrap
     and base_field =
       Ast_cocci.base_field =
-        Field of fullType * ident option * bitfield option * string mcode
+        Field of fullType * ident option * attr list * bitfield option *
+          string mcode
       | MetaField of meta_name mcode * constraints * keep_binding * inherited
       | MetaFieldList of meta_name mcode * listlen * constraints *
           keep_binding * inherited
@@ -3419,7 +3421,8 @@ module Ast0_cocci :
         MetaField of Ast_cocci.meta_name mcode * constraints * pure
       | MetaFieldList of Ast_cocci.meta_name mcode * listlen * constraints *
           pure
-      | Field of typeC * ident option * bitfield option * string mcode
+      | Field of typeC * ident option * attr list * bitfield option *
+          string mcode
       | DisjField of string mcode * field list * string mcode list *
           string mcode
       | ConjField of string mcode * field list * string mcode list *
