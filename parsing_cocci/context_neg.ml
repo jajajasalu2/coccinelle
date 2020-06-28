@@ -757,10 +757,14 @@ let equal_declaration d1 d2 =
       equal_mcode name1 name2
   | (Ast0.Init(stg1,_,_,attr1,eq1,_,sem1),
      Ast0.Init(stg2,_,_,attr2,eq2,_,sem2)) ->
-      equal_option stg1 stg2 && List.for_all2 equal_attribute attr1 attr2 &&
+      equal_option stg1 stg2 &&
+      (List.length attr1) = (List.length attr2) &&
+      List.for_all2 equal_attribute attr1 attr2 &&
       equal_mcode eq1 eq2 && equal_mcode sem1 sem2
   | (Ast0.UnInit(stg1,_,_,attr1,sem1),Ast0.UnInit(stg2,_,_,attr2,sem2)) ->
-      equal_option stg1 stg2 && List.for_all2 equal_attribute attr1 attr2 &&
+      equal_option stg1 stg2 &&
+      (List.length attr1) = (List.length attr2) &&
+      List.for_all2 equal_attribute attr1 attr2 &&
       equal_mcode sem1 sem2
   | (Ast0.FunProto(fninfo1,name1,lp1,p1,va1,rp1,sem1),
      Ast0.FunProto(fninfo2,name2,lp2,p2,va2,rp2,sem2)) ->
