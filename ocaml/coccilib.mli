@@ -2520,6 +2520,7 @@ module Ast_cocci :
       | MetaPosDecl of arity * meta_name
       | MetaComDecl of arity * meta_name
       | MetaFmtDecl of arity * meta_name
+      | MetaAttributeDecl of arity * meta_name
       | MetaFragListDecl of arity * meta_name * list_len
       | MetaAnalysisDecl of string * meta_name
       | MetaDeclarerDecl of arity * meta_name
@@ -2928,6 +2929,8 @@ module Ast_cocci :
     and base_attr =
       Ast_cocci.base_attr =
         Attribute of string mcode
+      | MetaAttribute of meta_name mcode * constraints * keep_binding *
+          inherited
     and attr = base_attr wrap
     and metaStmtInfo =
       Ast_cocci.metaStmtInfo =
@@ -3560,6 +3563,7 @@ module Ast0_cocci :
     and base_attr =
       Ast0_cocci.base_attr =
         Attribute of string mcode
+      | MetaAttribute of Ast_cocci.meta_name mcode * constraints * pure
     and attr = base_attr wrap
     and ('a, 'b) whencode =
       ('a, 'b) Ast0_cocci.whencode =
