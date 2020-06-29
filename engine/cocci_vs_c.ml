@@ -229,6 +229,8 @@ let equal_metavarval valu valu' =
 
   | Ast_c.MetaFmtVal a, Ast_c.MetaFmtVal b ->
       Lib_parsing_c.al_string_format a = Lib_parsing_c.al_string_format b
+  | Ast_c.MetaAttributeVal a, Ast_c.MetaAttributeVal b ->
+      Lib_parsing_c.al_attribute a = Lib_parsing_c.al_attribute b
   | Ast_c.MetaFragListVal a, Ast_c.MetaFragListVal b ->
       Lib_parsing_c.al_string_fragments a =
       Lib_parsing_c.al_string_fragments b
@@ -287,7 +289,7 @@ let equal_metavarval valu valu' =
       |B.MetaExprListVal _
       |B.MetaExprVal _|B.MetaLocalFuncVal _|B.MetaFuncVal _|B.MetaIdVal _
       |B.MetaAssignOpVal _ | B.MetaBinaryOpVal _
-      |B.MetaFmtVal _|B.MetaFragListVal _
+      |B.MetaFmtVal _|B.MetaFragListVal _|B.MetaAttributeVal _
     ), _
       -> raise (Impossible 16)
 
@@ -322,6 +324,8 @@ let equal_inh_metavarval valu valu'=
   | Ast_c.MetaFmtVal a, Ast_c.MetaFmtVal b ->
       Lib_parsing_c.al_inh_string_format a =
       Lib_parsing_c.al_inh_string_format b
+  | Ast_c.MetaAttributeVal a, Ast_c.MetaAttributeVal b ->
+      Lib_parsing_c.al_inh_attribute a = Lib_parsing_c.al_inh_attribute b
   | Ast_c.MetaFragListVal a, Ast_c.MetaFragListVal b ->
       Lib_parsing_c.al_inh_string_fragments a =
       Lib_parsing_c.al_inh_string_fragments b
@@ -388,7 +392,7 @@ let equal_inh_metavarval valu valu'=
       |B.MetaExprListVal _
       |B.MetaExprVal _|B.MetaLocalFuncVal _|B.MetaFuncVal _|B.MetaIdVal _
       |B.MetaAssignOpVal _ | B.MetaBinaryOpVal _
-      |B.MetaFmtVal _|B.MetaFragListVal _
+      |B.MetaFmtVal _|B.MetaFragListVal _|B.MetaAttributeVal _
     ), _
       -> raise (Impossible 17)
 
