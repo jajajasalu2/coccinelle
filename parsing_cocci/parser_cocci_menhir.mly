@@ -1495,11 +1495,11 @@ fninfo:
 	let _ = List.find (function Ast0.FInline(_) -> true | _ -> false) $2 in
 	raise (Semantic_cocci.Semantic "duplicate inline")
       with Not_found -> (Ast0.FInline(P.clt2mcode "inline" $1))::$2 }
-  | Tattr    fninfo
+  | a=Tattr    fninfo
       { try
 	let _ = List.find (function Ast0.FAttr(_) -> true | _ -> false) $2 in
 	raise (Semantic_cocci.Semantic "multiple attributes")
-      with Not_found -> (Ast0.FAttr(P.id2mcode $1))::$2 }
+      with Not_found -> (Ast0.FAttr(P.make_attr a))::$2 }
 
 fninfo_nt:
     /* empty */ { [] }
@@ -1514,11 +1514,11 @@ fninfo_nt:
 	let _ = List.find (function Ast0.FInline(_) -> true | _ -> false) $2 in
 	raise (Semantic_cocci.Semantic "duplicate inline")
       with Not_found -> (Ast0.FInline(P.clt2mcode "inline" $1))::$2 }
-  | Tattr    fninfo_nt
+  | a=Tattr    fninfo_nt
       { try
 	let _ = List.find (function Ast0.FAttr(_) -> true | _ -> false) $2 in
 	raise (Semantic_cocci.Semantic "duplicate init")
-      with Not_found -> (Ast0.FAttr(P.id2mcode $1))::$2 }
+      with Not_found -> (Ast0.FAttr(P.make_attr a))::$2 }
 
 storage:
          s=Tstatic      { P.clt2mcode Ast.Static s }
@@ -3227,12 +3227,14 @@ script_virt_name_decl:
 
 %inline
 attr_list:
-                        { [] }
- | a=Tattr f=full_attr_list {P.id2mcode a::f}
+                           { [] }
+ | Tattr f=full_attr_list
+    { let a = P.make_attr $1 in a::f }
 
 full_attr_list:
-                        { [] }
- | Tattr full_attr_list {P.id2mcode $1::$2}
+                           { [] }
+ | Tattr f=full_attr_list
+    { let a = P.make_attr $1 in a::f }
 
 anything: /* used for script code */
    TIdentifier { "identifier" }
