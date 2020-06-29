@@ -254,6 +254,7 @@ let inline_id aft = function
 %token <Parse_aux.expinfo>       TMetaErr
 %token <Parse_aux.cstrinfo>          TMetaParam TMetaStm
 %token <Parse_aux.cstrinfo>          TMetaInit TMetaDecl TMetaField TMeta
+%token <Parse_aux.cstrinfo>          TMetaAttribute
 %token <Parse_aux.list_info>     TMetaParamList TMetaExpList TMetaInitList
 %token <Parse_aux.list_info>     TMetaFieldList TMetaStmList TMetaDParamList
 %token <Parse_aux.typed_expinfo_bitfield> TMetaExp
@@ -764,6 +765,10 @@ delimited_list_len:
     { (fun arity name pure check_meta constraints ->
       let tok = check_meta(Ast.MetaTypeDecl(arity,name)) in
       !Data.add_type_meta name constraints pure; tok) }
+| TAttribute
+    { (fun arity name pure check_meta constraints ->
+      let tok = check_meta(Ast.MetaAttributeDecl(arity,name)) in
+      !Data.add_attribute_meta name constraints pure; tok) }
 | TError
     { (fun arity name pure check_meta constraints ->
       let tok = check_meta(Ast.MetaErrDecl(arity,name)) in
@@ -1495,11 +1500,11 @@ fninfo:
 	let _ = List.find (function Ast0.FInline(_) -> true | _ -> false) $2 in
 	raise (Semantic_cocci.Semantic "duplicate inline")
       with Not_found -> (Ast0.FInline(P.clt2mcode "inline" $1))::$2 }
-  | a=Tattr    fninfo
+  | a=attr    fninfo
       { try
 	let _ = List.find (function Ast0.FAttr(_) -> true | _ -> false) $2 in
 	raise (Semantic_cocci.Semantic "multiple attributes")
-      with Not_found -> (Ast0.FAttr(P.make_attr a))::$2 }
+      with Not_found -> (Ast0.FAttr(a))::$2 }
 
 fninfo_nt:
     /* empty */ { [] }
@@ -1514,11 +1519,11 @@ fninfo_nt:
 	let _ = List.find (function Ast0.FInline(_) -> true | _ -> false) $2 in
 	raise (Semantic_cocci.Semantic "duplicate inline")
       with Not_found -> (Ast0.FInline(P.clt2mcode "inline" $1))::$2 }
-  | a=Tattr    fninfo_nt
+  | a=attr    fninfo_nt
       { try
 	let _ = List.find (function Ast0.FAttr(_) -> true | _ -> false) $2 in
 	raise (Semantic_cocci.Semantic "duplicate init")
-      with Not_found -> (Ast0.FAttr(P.make_attr a))::$2 }
+      with Not_found -> (Ast0.FAttr(a))::$2 }
 
 storage:
          s=Tstatic      { P.clt2mcode Ast.Static s }
@@ -3228,13 +3233,17 @@ script_virt_name_decl:
 %inline
 attr_list:
                            { [] }
- | Tattr f=full_attr_list
-    { let a = P.make_attr $1 in a::f }
+ | a=attr f=full_attr_list  { a::f }
 
 full_attr_list:
                            { [] }
- | Tattr f=full_attr_list
-    { let a = P.make_attr $1 in a::f }
+ | a=attr f=full_attr_list  { a::f }
+
+attr:
+   Tattr { P.make_attr $1 }
+ | TMetaAttribute
+    { let (nm,cstr,pure,clt) = $1 in
+      Ast0.wrap(Ast0.MetaAttribute(P.clt2mcode nm clt,cstr,pure)) }
 
 anything: /* used for script code */
    TIdentifier { "identifier" }
