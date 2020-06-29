@@ -1501,10 +1501,7 @@ fninfo:
 	raise (Semantic_cocci.Semantic "duplicate inline")
       with Not_found -> (Ast0.FInline(P.clt2mcode "inline" $1))::$2 }
   | a=attr    fninfo
-      { try
-	let _ = List.find (function Ast0.FAttr(_) -> true | _ -> false) $2 in
-	raise (Semantic_cocci.Semantic "multiple attributes")
-      with Not_found -> (Ast0.FAttr(a))::$2 }
+      { (Ast0.FAttr(a))::$2 }
 
 fninfo_nt:
     /* empty */ { [] }
@@ -1520,10 +1517,7 @@ fninfo_nt:
 	raise (Semantic_cocci.Semantic "duplicate inline")
       with Not_found -> (Ast0.FInline(P.clt2mcode "inline" $1))::$2 }
   | a=attr    fninfo_nt
-      { try
-	let _ = List.find (function Ast0.FAttr(_) -> true | _ -> false) $2 in
-	raise (Semantic_cocci.Semantic "duplicate init")
-      with Not_found -> (Ast0.FAttr(a))::$2 }
+      { (Ast0.FAttr(a))::$2 }
 
 storage:
          s=Tstatic      { P.clt2mcode Ast.Static s }
