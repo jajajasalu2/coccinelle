@@ -458,6 +458,7 @@ and print_attribute_list attrs =
 and print_attribute attr =
   match Ast.unwrap attr with
     Ast.Attribute(a) -> mcode print_string a
+  | Ast.MetaAttribute(name,_,_,_) -> mcode print_meta name
 
 and typeC ty =
   match Ast.unwrap ty with
