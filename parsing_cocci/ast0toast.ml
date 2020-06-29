@@ -190,7 +190,7 @@ let inline_mcodes =
     do_nothing do_nothing
     do_nothing do_nothing do_nothing do_nothing do_nothing do_nothing
     do_nothing do_nothing do_nothing_end do_nothing_end do_nothing do_nothing
-    do_nothing do_nothing do_nothing do_nothing
+    do_nothing do_nothing do_nothing do_nothing do_nothing
 
 (* --------------------------------------------------------------------- *)
 (* For function declarations.  Can't use the mcode at the root, because that
@@ -274,7 +274,7 @@ let check_allminus =
     donothing
     donothing ident expression donothing donothing typeC initialiser donothing
     declaration field donothing statement donothing case_line donothing
-    donothing
+    donothing donothing
 
 (* --------------------------------------------------------------------- *)
 (* --------------------------------------------------------------------- *)
