@@ -4214,61 +4214,39 @@ and fullType_optional_allminus allminus tya retb =
         return (Some tya, retb)
       )
 
-(* Works for many attributes, but assumes order will be preserved.  Looks
-for an exact match.  Actually the call site only allows a list of length
-one to come through.  Makes no requirement if attributes not present. *)
 
-(* The following is the intended version, on lists.  Unfortunately, this
-   requires SmPL attributes to be wrapped.  Which they are not, for some
-   reason. *)
-(*
-and attribute_list attras attrbs =
-  X.optional_attributes_flag (fun optional_attributes ->
-  match attras with
-    None -> return (None, attrbs)
-  | Some attras ->
-      let match_dots ea = None in
-      let build_dots (mcode, optexpr) =
-        failwith "attribute: build dots: not possible" in
-      let match_comma ea = None in
-      let build_comma ia1 =
-        failwith "attribute list: build comma: not possible" in
-      let match_metalist ea = None in
-      let build_metalist _ (ida,leninfo,keep,inherited) =
-	failwith "attribute list: build meta list: not possible" in
-      let mktermval v = failwith "attribute: mk term val: not possible" in
-      let special_cases ea eas ebs = None in
-      let no_ii x = failwith "attribute: no ii: not possible" in
-      list_matcher match_dots build_dots match_comma build_comma
-	match_metalist build_metalist mktermval
-	special_cases attribute X.distrf_attrs
-	B.split_nocomma B.unsplit_nocomma no_ii
-	(function x -> Some x) attras attrbs >>=
-      (fun attras attrbs -> return (Some attras, attrbs))) *)
-
-(* The cheap hackish version.  No wrapping requires... *)
+(* Order does not matter here. Maybe there should be an option
+ * for having the order matter?
+ * *)
 
 and attribute_list allminus attras attrbs =
   X.optional_attributes_flag (fun optional_attributes ->
-  match attras,attrbs with
-    [], _ when optional_attributes || attrbs = [] ->
-      if allminus
-      then
-        let rec loop = function
-            [] -> return ([],[])
-          | ib::ibs ->
-              X.distrf_attr minusizer ib >>= (fun _ ib ->
-                  loop ibs >>= (fun l ibs ->
-                    return([],ib::ibs))) in
-        loop attrbs
-      else return ([], attrbs)
-  | [], _ -> fail
-  | [attra], [attrb] ->
-    attribute allminus attra attrb >>= (fun attra attrb ->
-      return ([attra], [attrb])
-    )
-  | [attra], attrb -> fail
-  | _ -> failwith "only one attribute allowed in SmPL")
+  let rec minusize ias = function
+      [] -> return ([],[])
+    | ib::ibs ->
+        X.distrf_attr minusizer ib >>= (fun _ ib ->
+          minusize ias ibs >>= (fun l ibs ->
+            return(ias,ib::ibs))) in
+  let rec loop ias ibs =
+    match ias, ibs with
+      [], [] -> return ([], [])
+    | [], _ when optional_attributes ->
+        if allminus
+        then minusize ias ibs
+        else return (ias,ibs)
+    | x::xs, ys ->
+        let permut = Common.uncons_permut_lazy ys in
+        permut +> List.fold_left (fun acc ((e, pos), rest) ->
+          let rest = Lazy.force rest in
+          loop xs rest >>= (fun xs rest ->
+            attribute allminus x e >>= (fun x e ->
+            return (
+              x::xs,
+              Common.insert_elem_pos (e, pos) rest
+            ))) >||> acc
+        ) fail
+    | _ -> fail in
+  loop attras attrbs)
 
 and attribute = fun allminus ea eb ->
   match A.unwrap ea, eb with
