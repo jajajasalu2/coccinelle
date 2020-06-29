@@ -134,6 +134,7 @@ let create_root_token_table minus =
 	  | Ast0.ForInfoTag(d) -> Ast0.get_index d
 	  | Ast0.CaseLineTag(d) -> Ast0.get_index d
 	  | Ast0.StringFragmentTag(d) -> Ast0.get_index d
+	  | Ast0.AttributeTag(d) -> Ast0.get_index d
 	  | Ast0.TopTag(d) -> Ast0.get_index d
 	  | Ast0.IsoWhenTag(_) -> failwith "only within iso phase"
 	  | Ast0.IsoWhenTTag(_) -> failwith "only within iso phase"
@@ -462,6 +463,9 @@ let call_collect_minus context_nodes :
       | Ast0.StringFragmentTag(e) ->
 	  (Ast0.get_index e,
 	   (collect_minus_join_points e).VT0.combiner_rec_string_fragment e)
+      | Ast0.AttributeTag(e) ->
+          (Ast0.get_index e,
+           (collect_minus_join_points e).VT0.combiner_rec_attribute e)
       | Ast0.CaseLineTag(e) ->
 	  (Ast0.get_index e,
 	   (collect_minus_join_points e).VT0.combiner_rec_case_line e)
@@ -549,6 +553,7 @@ let mk_statement x        = Ast.StatementTag (Ast0toast.statement x)
 let mk_forinfo x          = Ast.ForInfoTag (Ast0toast.forinfo x)
 let mk_case_line x        = Ast.CaseLineTag (Ast0toast.case_line x)
 let mk_string_fragment x  = Ast.StringFragmentTag (Ast0toast.string_fragment x)
+let mk_attribute x        = Ast.AttributeTag (Ast0toast.attribute x)
 let mk_const_vol x        = Ast.ConstVolTag x
 let mk_token x info       = Ast.Token (x,Some info)
 let mk_meta (_,x) info    = Ast.Token (x,Some info)
@@ -753,6 +758,9 @@ let call_collect_plus context_nodes :
       | Ast0.StringFragmentTag(e) ->
 	  (Ast0.get_index e,
 	   (collect_plus_nodes e).VT0.combiner_rec_string_fragment e)
+      | Ast0.AttributeTag(e) ->
+          (Ast0.get_index e,
+           (collect_plus_nodes e).VT0.combiner_rec_attribute e)
       | Ast0.TopTag(e) ->
 	  (Ast0.get_index e,
 	   (collect_plus_nodes e).VT0.combiner_rec_top_level e)
