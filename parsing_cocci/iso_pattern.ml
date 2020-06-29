@@ -92,6 +92,9 @@ let anything_equal = function
   | (Ast0.StringFragmentTag(d1),Ast0.StringFragmentTag(d2)) ->
       (strip_info.VT0.rebuilder_rec_string_fragment d1) =
       (strip_info.VT0.rebuilder_rec_string_fragment d2)
+  | (Ast0.AttributeTag(d1),Ast0.AttributeTag(d2)) ->
+      (strip_info.VT0.rebuilder_rec_attribute d1) =
+      (strip_info.VT0.rebuilder_rec_attribute d2)
   | (Ast0.TopTag(d1),Ast0.TopTag(d2)) ->
       (strip_info.VT0.rebuilder_rec_top_level d1) =
       (strip_info.VT0.rebuilder_rec_top_level d2)
@@ -2946,6 +2949,8 @@ let rec rewrap_anything = function
       Ast0.CaseLineTag(rewrap.VT0.rebuilder_rec_case_line d)
   | Ast0.StringFragmentTag(d) ->
       Ast0.StringFragmentTag(rewrap.VT0.rebuilder_rec_string_fragment d)
+  | Ast0.AttributeTag(d) ->
+      Ast0.AttributeTag(rewrap.VT0.rebuilder_rec_attribute d)
   | Ast0.TopTag(d) -> Ast0.TopTag(rewrap.VT0.rebuilder_rec_top_level d)
   | Ast0.IsoWhenTag(_) | Ast0.IsoWhenTTag(_) | Ast0.IsoWhenFTag(_) ->
       failwith "only for isos within iso phase"
