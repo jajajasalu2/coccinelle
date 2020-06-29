@@ -1328,6 +1328,9 @@ let visitor mode bind option_default
       | Ast0.StringFragmentTag(f) ->
 	  let (f_n,f) = string_fragment f in
 	  (f_n,Ast0.StringFragmentTag(f))
+      | Ast0.AttributeTag(a) ->
+	  let (a_n,a) = attribute a in
+	  (a_n,Ast0.AttributeTag(a))
       | Ast0.TopTag(top) ->
 	  let (top_n,top) = top_level top in
 	  (top_n,Ast0.TopTag(top))
