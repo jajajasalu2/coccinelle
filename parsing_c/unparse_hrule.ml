@@ -432,6 +432,8 @@ let pp_meta_decl pr env decl =
       no_arity ar; pr "comments "; pp_name name; pr ";\n"
   | Ast.MetaFmtDecl(ar, name) ->
       no_arity ar; pr "format "; pp_name name; pr ";\n"
+  | Ast.MetaAttributeDecl(ar, name) ->
+      no_arity ar; pr "attribute "; pp_name name; pr ";\n"
   | Ast.MetaFragListDecl(ar, name, len) ->
       no_arity ar; pr "format list "; pp_len pr len; pp_name name; pr ";\n"
   | Ast.MetaAnalysisDecl(code, name) ->
