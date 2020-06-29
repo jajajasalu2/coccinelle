@@ -434,6 +434,7 @@ module Ast_c :
       | MetaStmtListVal of statement_sequencable list * stripped
       | MetaDParamListVal of string wrap wrap2 list
       | MetaFmtVal of string_format
+      | MetaAttributeVal of attribute
       | MetaFragListVal of string_fragment list
       | MetaAssignOpVal of assignOp
       | MetaBinaryOpVal of binaryOp
@@ -854,6 +855,7 @@ module Pretty_print_c :
       fragment : Ast_c.string_fragment printer;
       fragment_list : Ast_c.string_fragment list printer;
       format : Ast_c.string_format printer;
+      attribute : Ast_c.attribute printer;
       flow : Control_flow_c.node printer;
       name : Ast_c.name printer;
     }
@@ -3785,6 +3787,7 @@ type param_type =
   | FieldList of Ast_c.field list
   | FragList of Ast_c.string_fragment list
   | Fmt of Ast_c.string_format
+  | Attribute of Ast_c.attribute
   | Stmt of Ast_c.statement
   | StmtList of Ast_c.statement_sequencable list
 val fcts :
