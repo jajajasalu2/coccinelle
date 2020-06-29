@@ -1110,6 +1110,8 @@ let unparse_cocci_mv rule = function
       print_string "comments "; print_name rule r n; print_string ";"
   | Ast.MetaFmtDecl(_,(r,n)) ->
       print_string "format "; print_name rule r n; print_string ";"
+  | Ast.MetaAttributeDecl(_,(r,n)) ->
+      print_string "attribute "; print_name rule r n; print_string ";"
   | Ast.MetaFragListDecl(_,(r,n),len) ->
       print_string "fragment list"; print_listlen rule len;
       print_name rule r n; print_string ";"
