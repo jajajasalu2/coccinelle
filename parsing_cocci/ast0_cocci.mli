@@ -599,6 +599,7 @@ val stmt : statement -> anything
 val forinfo : forinfo -> anything
 val case_line : case_line -> anything
 val string_fragment : string_fragment -> anything
+val attr : attr -> anything
 val top : top_level -> anything
 
 (* --------------------------------------------------------------------- *)
