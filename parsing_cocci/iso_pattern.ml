@@ -2458,6 +2458,8 @@ let get_name bindings = function
       (nm,function nm -> Ast.MetaFragListDecl(ar,nm,nm1))
   | Ast.MetaFmtDecl(ar,nm) ->
       (nm,function nm -> Ast.MetaFmtDecl(ar,nm))
+  | Ast.MetaAttributeDecl(ar,nm) ->
+      (nm,function nm -> Ast.MetaAttributeDecl(ar,nm))
   | Ast.MetaAnalysisDecl(ar,nm) ->
       (nm,function nm -> Ast.MetaAnalysisDecl(ar,nm))
   | Ast.MetaDeclarerDecl(ar,nm) ->
