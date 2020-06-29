@@ -183,7 +183,7 @@ let collect_plus_lines top =
       donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing statement donothing donothing donothing
-      donothing in
+      donothing donothing in
   fn.VT0.combiner_rec_top_level top
 
 (* --------------------------------------------------------------------- *)
@@ -554,7 +554,7 @@ let classify is_minus all_marked table code =
       ident expression (do_nothing Ast0.assignOp) (do_nothing Ast0.binaryOp)
       typeC initialiser param declaration field enum_decl
       statement (do_nothing Ast0.forinfo) case_line string_fragment
-      (do_top Ast0.top) in
+      (do_nothing Ast0.attr) (do_top Ast0.top) in
   combiner.VT0.combiner_rec_top_level code
 
 (* --------------------------------------------------------------------- *)
@@ -1052,7 +1052,7 @@ let contextify_all =
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
-    donothing donothing donothing
+    donothing donothing donothing donothing
 
 let contextify_whencode =
   let bind x y = () in
