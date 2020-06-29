@@ -83,7 +83,8 @@ it *)
       (donothing Ast0.param) (donothing Ast0.decl)
       (donothing Ast0.field) (donothing Ast0.enum_decl) statement
       (donothing Ast0.forinfo) (donothing Ast0.case_line)
-      (donothing Ast0.string_fragment) topfn in
+      (donothing Ast0.string_fragment) (donothing Ast0.attr)
+      topfn in
   res.VT0.combiner_rec_top_level e
 
 (* --------------------------------------------------------------------- *)
@@ -385,7 +386,7 @@ bind to that; not good for isomorphisms *)
     edots idots pdots sdots ddots fdots enumdots cdots dpdots
     ident expression do_nothing do_nothing
     typeC initialiser param decl field do_nothing statement forinfo
-    case_line do_nothing do_top
+    case_line do_nothing do_nothing do_top
 
 
 let call_collect_minus context_nodes :
@@ -673,7 +674,8 @@ let collect_plus_nodes root =
     (do_nothing mk_declaration) (do_nothing mk_field)
     (do_nothing mk_enum_decl)
     stmt (do_nothing mk_forinfo) (do_nothing mk_case_line)
-    (do_nothing mk_string_fragment) toplevel
+    (do_nothing mk_string_fragment) (do_nothing mk_attribute)
+    toplevel
 
 let call_collect_plus context_nodes :
     (int * (Ast0.info * Ast.count * Ast.anything) list) list =
@@ -1231,7 +1233,7 @@ let reevaluate_contextness =
       donothing donothing donothing donothing donothing donothing stmt
       donothing
       donothing donothing
-      donothing in
+      donothing donothing in
   res.VT0.combiner_rec_top_level
 
 (* --------------------------------------------------------------------- *)
