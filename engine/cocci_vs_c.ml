@@ -2899,16 +2899,19 @@ and get_fninfo fninfoa =
     with [A.FInline(i)] -> Some i | _ -> None in
 
   let attras =
-    match List.filter (function A.FAttr(a) -> true | _ -> false) fninfoa
-    with
-      [] -> [] |(* _ -> failwith "matching of attributes not supported"*)
+    let rec fattrs = function
+      [] -> []
+    | A.FAttr(a)::attrs -> [a] @ (fattrs attrs)
+    | _::attrs -> fattrs attrs in
+    fattrs (List.filter (function A.FAttr(a) -> true | _ -> false) fninfoa) in
+      (*[] -> [] |(* _ -> failwith "matching of attributes not supported"*)*)
 	(* The following provides matching of one attribute against one
 	   attribute.  But the problem is that in the C ast there are no
 	   attributes in the attr field.  The attributes are all comments.
 	   So there is nothing to match against. *)
-	(**)  [A.FAttr(a)] -> [a]
+	(*(**)  [A.FAttr(a)] -> [a]*)
 	(*| [] -> None*)
-	| _ -> failwith "only one attr match allowed" (**) in
+	(*| _ -> failwith "only one attr match allowed" (**) in*)
   (stoa,tya,inla,attras)
 
 and put_fninfo stoa tya inla attras =
