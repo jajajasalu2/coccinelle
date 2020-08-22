@@ -1940,3 +1940,22 @@ val find_bounded_cache :
 val extend_bounded_cache :
     (int * int ref * ('a,('a * 'b) dll) Hashtbl.t * ('a * 'b) dll) ->
       'a -> 'b -> unit
+
+type 'a leftist =
+  | LeftistLeaf
+  | LeftistNode of 'a leftist * 'a * 'a leftist * int
+
+val create_lfu_cache :
+    int -> 'a ->
+      (int * int ref * 'a leftist ref * ('a, int) Hashtbl.t *
+        ('a, 'b) Hashtbl.t)
+
+val extend_lfu_cache :
+    (int * int ref * 'a leftist ref * ('a, int) Hashtbl.t *
+      ('a, 'b) Hashtbl.t) ->
+      'a -> 'b -> unit
+
+val find_lfu_cache :
+    (int * int ref * 'a leftist ref * ('a, int) Hashtbl.t *
+      ('a, 'b) Hashtbl.t) ->
+      'a -> int -> 'b option
