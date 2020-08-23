@@ -1947,15 +1947,15 @@ type 'a leftist =
 
 val create_lfu_cache :
     int -> 'a ->
-      (int * int ref * 'a leftist ref * ('a, int) Hashtbl.t *
+      (int * int ref * 'a leftist ref * ('a, (int * int option)) Hashtbl.t *
         ('a, 'b) Hashtbl.t)
 
 val extend_lfu_cache :
-    (int * int ref * 'a leftist ref * ('a, int) Hashtbl.t *
+    (int * int ref * 'a leftist ref * ('a, (int * int option)) Hashtbl.t *
       ('a, 'b) Hashtbl.t) ->
       'a -> 'b -> unit
 
 val find_lfu_cache :
-    (int * int ref * 'a leftist ref * ('a, int) Hashtbl.t *
+    (int * int ref * 'a leftist ref * ('a, (int * int option)) Hashtbl.t *
       ('a, 'b) Hashtbl.t) ->
-      'a -> int -> 'b option
+      'a -> 'b option

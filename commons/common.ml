@@ -6088,7 +6088,7 @@ let leftist_rank = function LeftistLeaf -> 0 | LeftistNode (_,_,_,r) -> r
 let rec leftist_merge t1 t2 freq_table =
   let heapfreq freq_table k =
     try
-      Hashtbl.find freq_table k
+      fst (Hashtbl.find freq_table k)
     with Not_found -> 0 in
   match t1,t2 with
     | LeftistLeaf, t | t, LeftistLeaf -> t
@@ -6112,26 +6112,30 @@ let leftist_delete_min freq_table = function
   | LeftistLeaf -> failwith "empty"
   | LeftistNode (l, _, r, _) -> leftist_merge l r freq_table
 
-let find_lfu_cache cache k inc_freq =
+let find_lfu_cache cache k =
   let (n, cur, minheap, freq_table, values) = cache in
   let v =
     try Some (Hashtbl.find values k)
     with Not_found -> None in
   let f =
-    try ((Hashtbl.find freq_table k) + inc_freq)
-    with Not_found -> inc_freq in
+    try Hashtbl.find freq_table k
+    with Not_found -> (0, None) in
+  let new_f =
+    match (snd f) with
+      None -> (fst f, None)
+    | Some x -> (fst f + x, Some x) in
   Hashtbl.remove freq_table k;
-  Hashtbl.add freq_table k f;
+  Hashtbl.add freq_table k new_f;
   v
 
 let extend_lfu_cache cache k v =
   let (n, cur, minheap, freq_table, values) = cache in
   let f = Hashtbl.find freq_table k in
   let minkey = leftist_get_min !minheap in
-  let minfreq = Hashtbl.find freq_table minkey in
+  let minfreq = fst (Hashtbl.find freq_table minkey) in
   if !cur = n
   then begin
-    if minfreq < f
+    if minfreq < (fst f)
     then begin
       minheap := leftist_delete_min freq_table !minheap;
       Hashtbl.remove values minkey;
@@ -6149,5 +6153,5 @@ let create_lfu_cache n k =
   let freq_table = Hashtbl.create 101 in
   let values = Hashtbl.create 101 in
   let minheap = ref (leftist_singleton k) in
-  Hashtbl.add freq_table k 0;
+  Hashtbl.add freq_table k (0, None);
   (n, ref 0, minheap, freq_table, values)

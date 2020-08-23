@@ -952,7 +952,7 @@ let rec _parse_print_error_heuristic2 saved_typedefs saved_macros
     let cached_result =
       if use_header_cache
       then
-	  (match Common.find_lfu_cache header_cache file 0 with
+	  (match Common.find_lfu_cache header_cache file with
 	    None ->
               pr2_err (Printf.sprintf "CACHE MISS: %s" file);
               None
@@ -1238,11 +1238,14 @@ and _parse_print_error_heuristic2bis saved_typedefs saved_macros
             then
               begin
                 let (_, _, _, freq_table, _) = header_cache in
-                let errs =
+                let (errs, err_inc) =
                   try Hashtbl.find freq_table file
-                  with Not_found -> 0 in
-                Hashtbl.remove freq_table file;
-                Hashtbl.add freq_table file (errs + 1);
+                  with Not_found -> (0, None) in
+                match err_inc with
+                  None ->
+                    Hashtbl.remove freq_table file;
+                    Hashtbl.add freq_table file ((errs + 1), None);
+                | Some x -> ()
               end;
 
 
@@ -1259,6 +1262,15 @@ and _parse_print_error_heuristic2bis saved_typedefs saved_macros
     )
   in
   let v = loop tr in
+  let (_, _, _, freq_table, _) = header_cache in
+  let errs, err_inc =
+    try Hashtbl.find freq_table file
+    with Not_found -> (0, None) in
+  (match err_inc with
+    None when errs > 0 ->
+      Hashtbl.remove freq_table file;
+      Hashtbl.add freq_table file (errs, Some(errs));
+  | None | Some _ -> ());
   let v = with_program2 Parsing_consistency_c.consistency_checking v in
   with_program2_unit Danger.add_danger v;
   let v =
