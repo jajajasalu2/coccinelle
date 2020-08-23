@@ -25,6 +25,9 @@ module Stat = Parsing_stat
 (*****************************************************************************)
 let pr2_err, pr2_once = Common.mk_pr2_wrappers Flag_parsing_c.verbose_parsing
 
+let is_header_file f = f ==~ Str.regexp ".*\\.h$"
+
+
 (*****************************************************************************)
 (* Helpers *)
 (*****************************************************************************)
@@ -922,7 +925,7 @@ module StringSet : Set.S with type elt = string = Set.Make(String)
 
 module StringMap : Map.S with type key = string = Map.Make(String)
 
-let header_cache = Common.create_bounded_cache 0(*disabled 300*) ("",None)
+let header_cache = Common.create_lfu_cache 100 "ROOT"
 
 let tree_stack = ref []
 let seen_files = ref []
@@ -947,12 +950,14 @@ let rec _parse_print_error_heuristic2 saved_typedefs saved_macros
   else begin
     seen_files := file :: !seen_files;
     let cached_result =
-      if false && use_header_cache
+      if use_header_cache
       then
-	try
-	  (match Common.find_bounded_cache header_cache file with
-	    None -> failwith "Not possible"
+	  (match Common.find_lfu_cache header_cache file 0 with
+	    None ->
+              pr2_err (Printf.sprintf "CACHE MISS: %s" file);
+              None
 	  | Some (cached,cached_includes) ->
+              pr2_err (Printf.sprintf "CACHE HIT: %s" file);
 	      List.iter
 		(function incl ->
 		  handle_include file incl
@@ -962,14 +967,13 @@ let rec _parse_print_error_heuristic2 saved_typedefs saved_macros
 			nonlocal header_filename use_header_cache))
 		cached_includes;
 	      Some cached)
-	with Not_found -> None
       else None in
     match cached_result with
       | None ->
         let result =
           _parse_print_error_heuristic2bis saved_typedefs saved_macros
             parse_strings file use_header_cache in
-        (if false && use_header_cache && cache
+        (if use_header_cache && cache
 	then
 	  let my_includes =
 	    let my_includes = ref [] in
@@ -983,8 +987,8 @@ let rec _parse_print_error_heuristic2 saved_typedefs saved_macros
 	    let (pgm,ty,defs) = result.parse_trees in
 	    Visitor_c.vk_program bigf (List.map fst pgm);
 	    !my_includes in
-	  Common.extend_bounded_cache header_cache file
-	    (Some (result,my_includes)));
+	  Common.extend_lfu_cache header_cache file
+	    (result,my_includes));
         tree_stack := result :: !tree_stack;
         Some result
       | Some result ->
@@ -1230,6 +1234,17 @@ and _parse_print_error_heuristic2bis saved_typedefs saved_macros
               error_info::stat.Stat.problematic_lines;
 
           end;
+          if is_header_file file
+            then
+              begin
+                let (_, _, _, freq_table, _) = header_cache in
+                let errs =
+                  try Hashtbl.find freq_table file
+                  with Not_found -> 0 in
+                Hashtbl.remove freq_table file;
+                Hashtbl.add freq_table file (errs + 1);
+              end;
+
 
           if was_define && !Flag_parsing_c.filter_define_error
           then stat.Stat.correct <- stat.Stat.correct + diffline
