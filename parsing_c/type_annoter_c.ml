@@ -186,6 +186,13 @@ type nameenv = {
 
 type environment = nameenv list
 
+let includes_parse_fn file =
+  let choose_includes = Includes.get_parsing_style () in
+  Includes.set_parsing_style Includes.Parse_no_includes;
+  let ret = Parse_c.parse_c_and_cpp false false file in
+  Includes.set_parsing_style choose_includes;
+  List.map fst (fst ret)
+
 (* ------------------------------------------------------------ *)
 (* can be modified by the init_env function below, by
  * the file environment_unix.h
@@ -797,8 +804,18 @@ let annotater_expr_visitor_subpart = (fun (k,bigf) expr ->
                     Type_c.noTypeHere
                 )
             | None ->
-                pr2_once ("type_annotater: no type for function ident: " ^ s);
-                Type_c.noTypeHere
+                let f =
+                  Ast_c.file_of_info
+                    (Ast_c.info_of_name ident) in
+                let typ =
+                  Includes_cache.get_type_from_name_cache
+                    f s includes_parse_fn in
+                (match typ with
+                  None ->
+                    pr2_once
+                      ("type_annotater: no type for function ident: " ^ s);
+                    Type_c.noTypeHere
+                | Some x -> x)
             )
         )
 
@@ -860,7 +877,18 @@ let annotater_expr_visitor_subpart = (fun (k,bigf) expr ->
                       else
                         pr2 ("Type_annoter: no type found for: " ^ s)
                     ;
-                    Type_c.noTypeHere
+                    let f =
+                      Ast_c.file_of_info
+                        (Ast_c.info_of_name ident) in
+                    let typ =
+                      Includes_cache.get_type_from_name_cache
+                        f s includes_parse_fn in
+                    (match typ with
+                      None ->
+                        pr2_once
+                          ("Type_annoter: no type found for: " ^ s);
+                        Type_c.noTypeHere
+                    | Some x -> x)
                 )
             )
         )
@@ -935,7 +963,20 @@ let annotater_expr_visitor_subpart = (fun (k,bigf) expr ->
 
           in
           (match topt with
-          | None -> Type_c.noTypeHere
+          | None ->
+              let s = Ast_c.str_of_name namefld in
+              let f =
+                Ast_c.file_of_info
+                  (Ast_c.info_of_name namefld) in
+              let typ =
+                Includes_cache.get_type_from_name_cache
+                  f s includes_parse_fn in
+              (match typ with
+                None ->
+                  pr2_once
+                    ("type_annotater: no type for field: " ^ s);
+                  Type_c.noTypeHere
+              | Some x -> x)
           | Some t ->
               match unwrap_unfold_env t with
               | StructUnion (su, sopt, fields) ->
