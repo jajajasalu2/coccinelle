@@ -2239,6 +2239,8 @@ let full_engine2
       let c_infos =
 	prepare_c cfiles choose_includes parse_strings has_changes in
 
+      Includes_cache.print_dependency_graph ();
+      (*Includes_cache.print_hashtable ();*)
       (* ! the big loop ! *)
       let c_infos' = bigloop cocci_infos c_infos parse_strings in
 
