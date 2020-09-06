@@ -809,7 +809,7 @@ let annotater_expr_visitor_subpart = (fun (k,bigf) expr ->
                     (Ast_c.info_of_name ident) in
                 let typ =
                   Includes_cache.get_type_from_name_cache
-                    f s includes_parse_fn in
+                    f s Includes_cache.CacheVarFunc includes_parse_fn in
                 (match typ with
                   None ->
                     pr2_once
@@ -881,8 +881,13 @@ let annotater_expr_visitor_subpart = (fun (k,bigf) expr ->
                       Ast_c.file_of_info
                         (Ast_c.info_of_name ident) in
                     let typ =
-                      Includes_cache.get_type_from_name_cache
-                        f s includes_parse_fn in
+                      let _typ = Includes_cache.get_type_from_name_cache
+                        f s Includes_cache.CacheEnumConst includes_parse_fn in
+                      match _typ with
+                        None ->
+                           Includes_cache.get_type_from_name_cache
+                             f s Includes_cache.CacheVarFunc includes_parse_fn
+                      | Some _ -> _typ in
                     (match typ with
                       None ->
                         pr2_once
@@ -963,20 +968,7 @@ let annotater_expr_visitor_subpart = (fun (k,bigf) expr ->
 
           in
           (match topt with
-          | None ->
-              let s = Ast_c.str_of_name namefld in
-              let f =
-                Ast_c.file_of_info
-                  (Ast_c.info_of_name namefld) in
-              let typ =
-                Includes_cache.get_type_from_name_cache
-                  f s includes_parse_fn in
-              (match typ with
-                None ->
-                  pr2_once
-                    ("type_annotater: no type for field: " ^ s);
-                  Type_c.noTypeHere
-              | Some x -> x)
+          | None -> Type_c.noTypeHere
           | Some t ->
               match unwrap_unfold_env t with
               | StructUnion (su, sopt, fields) ->
@@ -995,7 +987,24 @@ let annotater_expr_visitor_subpart = (fun (k,bigf) expr ->
                         Type_c.noTypeHere
                   )
               | _ ->
-		  Type_c.noTypeHere
+                let s = Ast_c.str_of_name namefld in
+                let f =
+                  Ast_c.file_of_info
+                    (Ast_c.info_of_name namefld) in
+                let ret_typ =
+                  match (Ast_c.unwrap (snd t)) with
+                     Ast_c.StructUnionName(_, sname) ->
+                       let typ =
+                         Includes_cache.get_type_from_name_cache
+                           f s (Includes_cache.CacheField sname) includes_parse_fn in
+                       (match typ with
+                         None ->
+                           pr2_once
+                             ("type_annotater: no type for field: " ^ s);
+                           Type_c.noTypeHere
+                       | Some x -> x)
+                  | _ -> Type_c.noTypeHere in
+                ret_typ
           )
         )
 

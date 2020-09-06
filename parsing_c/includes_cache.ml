@@ -118,8 +118,13 @@ let print_dependency_graph _ =
 (* Name cache *)
 (*****************************************************************************)
 
+type cache_exp =
+  | CacheField of string (* Name of the struct/union it is defined in *)
+  | CacheEnumConst
+  | CacheVarFunc
+
 (* Map construct name to list of files it is defined in *)
-let name_cache : (string, filename list) Hashtbl.t ref =
+let name_cache : (string, (filename * cache_exp) list) Hashtbl.t ref =
   ref (Hashtbl.create 101)
 
 (* If a file's AST has been used recently, it will probably be used again by
@@ -128,16 +133,17 @@ let name_cache : (string, filename list) Hashtbl.t ref =
 let cur_file = ref None
 let cur_files = ref None
 
-let add_to_name_cache name file =
+let add_to_name_cache name (file, exp) =
   let l =
     try Hashtbl.find !name_cache name
     with Not_found -> [] in
-  Hashtbl.replace !name_cache name (l @ [file])
+  Hashtbl.replace !name_cache name ([(file, exp)] @ l)
 
 (* Two visitors, One to cache names and the other to get the type associated to
  * a name. *)
 let cache_name_visitor file =
-  let cache_struct_fields def =
+
+  let cache_struct_fields sname def =
     let _cache_field field =
       match (Ast_c.unwrap field) with
         Ast_c.Simple (name, _)
@@ -145,19 +151,23 @@ let cache_name_visitor file =
           name +>
             do_option
               (fun n ->
-                 add_to_name_cache (Ast_c.str_of_name n) file) in
+                 add_to_name_cache (Ast_c.str_of_name n)
+                 (file, CacheField(sname))) in
     let _cache_struct_fields field =
       match field with
         Ast_c.DeclarationField(Ast_c.FieldDeclList(l)) ->
           List.iter _cache_field (Ast_c.unwrap l)
       | _ -> () in
     List.iter _cache_struct_fields def in
+
   let cache_enum_constants def =
     def +>
       List.iter
         (fun ec ->
            add_to_name_cache
-             ((Ast_c.unwrap ec) +> fst +> Ast_c.str_of_name) file) in
+             ((Ast_c.unwrap ec) +> fst +> Ast_c.str_of_name)
+             (file, CacheEnumConst)) in
+
   { Visitor_c.default_visitor_c with
     Visitor_c.ktoplevel = fun (k, bigf) p ->
       match p with
@@ -166,33 +176,28 @@ let cache_name_visitor file =
             ([{Ast_c.v_namei = Some (name, _);
               Ast_c.v_type = typ}, _], _)) ->
                 (* Storing whatever to the name cache. These are global and
-                 * have a name, so they're all useful.
-                 * TODO: Might be subject to change when we want to add the
-                 * type of the construct to the name cache as well, as done in
-                 * type_annoter_c with nameenv. Right now we're just blindly
-                 * giving away the type associated with a name without checking
-                 * whether this expression type was what we were looking for.
-                 * *)
-                add_to_name_cache (Ast_c.str_of_name name) file
+                 * have a name, so they're all useful. *)
+                add_to_name_cache
+                  (Ast_c.str_of_name name) (file, CacheVarFunc)
       | Ast_c.Declaration
           (Ast_c.DeclList
             ([{Ast_c.v_namei = None;
               Ast_c.v_type = typ}, _], _)) ->
             (match (Ast_c.unwrap (snd typ)) with
-              Ast_c.StructUnion (_, _, def) ->
+              Ast_c.StructUnion (_, Some n, def) ->
                 (* Cache field names *)
-                cache_struct_fields def
+                cache_struct_fields n def
             | Ast_c.Enum(_, def) ->
                 (* Cache enumeration constants *)
                 cache_enum_constants def
             | Ast_c.TypeName(_, def) ->
-                (* TODO: might have to cross reference the current
-                 * struct definitions and get the fields from there. *)
+                (* TODO *)
                 k p
             | _ -> k p)
       | Ast_c.CppTop
           (Ast_c.Define (name, _)) ->
-            add_to_name_cache (Ast_c.unwrap name) file
+            (* TODO *)
+            k p
       | _ -> k p
   }
 
@@ -223,7 +228,7 @@ let (int_type: Ast_c.fullType) =
 
 (* Kind of a very minimized version of what TAC does. Just search
  * toplevel with the given name, and get the type for it. *)
-let get_type_visitor file name l =
+let get_type_visitor file name exp_type l =
   let get_type typ =
     l := [(Some (typ, Ast_c.NotLocalVar), Ast_c.NotTest)] @ !l in
   let get_struct_fields def =
@@ -255,16 +260,20 @@ let get_type_visitor file name l =
           (Ast_c.DeclList
             ([{Ast_c.v_namei = Some (n, _);
               Ast_c.v_type = typ}, _], _))
-            when (Ast_c.str_of_name n) = name ->
+            when (Ast_c.str_of_name n) = name &&
+              exp_type = CacheVarFunc ->
                 get_type typ
       | Ast_c.Declaration
           (Ast_c.DeclList
             ([{Ast_c.v_namei = None;
               Ast_c.v_type = typ}, _], _)) ->
             (match (Ast_c.unwrap (snd typ)) with
-              Ast_c.StructUnion (_, _, def) ->
-                get_struct_fields def
-            | Ast_c.Enum(_, def) ->
+              Ast_c.StructUnion (_, snameopt, def) ->
+                (match snameopt with
+                  Some sname when exp_type = CacheField(sname) ->
+                    get_struct_fields def
+                | None | Some _ -> k p)
+            | Ast_c.Enum(_, def) when exp_type = CacheEnumConst ->
                 get_enum_constants def
             | _ -> k p)
       | _ -> k p
@@ -277,18 +286,38 @@ let extract_names file ast =
   ignore (Visitor_c.vk_program (cache_name_visitor file) ast)
 
 (* Use the visitor to get the type we need. *)
-let get_type_from_name_cache file name parse_fn =
+let get_type_from_name_cache file name exp_type parse_fn =
   let rec find_file l =
     match l with
       [] -> None
-    | x::xs ->
-        if path_exists_dependency_graph file x
-        then Some x
+    | (x, y)::xs ->
+        if (y = exp_type)
+        then begin
+          if path_exists_dependency_graph file x then Some (x, y)
+          else find_file xs
+        end
         else find_file xs in
-  let return_type l =
+  let return_type fl l =
     if List.length l <> 1
-    then None
-    else Some (List.hd l) in
+    then begin
+      if List.length l > 1
+      then
+        pr_inc
+          ("INCLUDES CACHE: more than one type: "
+           ^ name ^ " | "^ file ^ " | "^ fl)
+      else if List.length l = 0
+      then
+        pr_inc
+          ("INCLUDES CACHE: No type found: "
+           ^ name ^ " | "^ file ^ " | "^ fl);
+      None
+    end
+    else begin
+      pr_inc
+        ("INCLUDES CACHE: Found type: "
+         ^ name ^ " | "^ file ^ " | "^ fl);
+      Some (List.hd l)
+    end in
   let get_ast x =
     match !cur_files with
       Some (a, n) when n = file ->
@@ -319,21 +348,26 @@ let get_type_from_name_cache file name parse_fn =
     with Not_found -> [] in
   match (find_file file_list) with
     None -> None
-  | Some x ->
-      let ast = get_ast x in
-      let type_list = ref [] in
-      ignore
-        (Visitor_c.vk_program
-           (get_type_visitor file name type_list) ast);
-      return_type !type_list
+  | Some (x, t) ->
+      match t with
+        CacheEnumConst ->
+          (* Save on some parsing *)
+          Some (Some (int_type, Ast_c.NotLocalVar), Ast_c.NotTest)
+      | _ ->
+        let ast = get_ast x in
+        let type_list = ref [] in
+        ignore
+          (Visitor_c.vk_program
+            (get_type_visitor file name exp_type type_list) ast);
+        return_type x !type_list
 
-let print_hashtable _ =
-  Hashtbl.iter
-    (fun x y ->
-       pr_no_nl (Printf.sprintf "%s -> " x);
-       List.iter (fun z -> pr_no_nl (Printf.sprintf "%s " z)) y;
-       pr_no_nl (Printf.sprintf "\n"))
-    !name_cache
+(*let print_hashtable _ =*)
+  (*Hashtbl.iter*)
+    (*(fun x y ->*)
+       (*pr_no_nl (Printf.sprintf "%s -> " x);*)
+       (*List.iter (fun z -> pr_no_nl (Printf.sprintf "%s " z)) y;*)
+       (*pr_no_nl (Printf.sprintf "\n"))*)
+    (*!name_cache*)
 
 
 (*****************************************************************************)

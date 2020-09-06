@@ -4,7 +4,12 @@
  * The Coccinelle source code can be obtained at http://coccinelle.lip6.fr
  *)
 
-val print_hashtable : unit -> unit
+type cache_exp =
+  | CacheField of string (* Name of the struct/union it is defined in *)
+  | CacheEnumConst
+  | CacheVarFunc
+
+(*val print_hashtable : unit -> unit*)
 
 val has_been_parsed : string -> bool
 
@@ -21,6 +26,7 @@ val print_dependency_graph : unit -> unit
 val get_type_from_name_cache :
   Common.filename ->
     string ->
+    cache_exp ->
     (Common.filename -> Ast_c.program) ->
     Ast_c.exp_info option
 
