@@ -122,6 +122,7 @@ type cache_exp =
   | CacheField of string (* Name of the struct/union it is defined in *)
   | CacheEnumConst
   | CacheVarFunc
+  | CacheTypedef
 
 (* Map construct name to list of files it is defined in *)
 let name_cache : (string, (filename * cache_exp) list) Hashtbl.t ref =
@@ -130,7 +131,6 @@ let name_cache : (string, (filename * cache_exp) list) Hashtbl.t ref =
 (* If a file's AST has been used recently, it will probably be used again by
  * the type annoter. A better solution would be to use a LRU cache of size 5 or
  * so, but we all know how that turned out before. *)
-let cur_file = ref None
 let cur_files = ref None
 
 let add_to_name_cache name (file, exp) =
@@ -174,11 +174,16 @@ let cache_name_visitor file =
         Ast_c.Declaration
           (Ast_c.DeclList
             ([{Ast_c.v_namei = Some (name, _);
-              Ast_c.v_type = typ}, _], _)) ->
+              Ast_c.v_type = typ;
+              Ast_c.v_storage = strg}, _], _)) ->
                 (* Storing whatever to the name cache. These are global and
                  * have a name, so they're all useful. *)
+                let exp_type =
+                  match (fst strg) with
+                    Ast_c.StoTypedef -> CacheTypedef
+                  | _ -> CacheVarFunc in
                 add_to_name_cache
-                  (Ast_c.str_of_name name) (file, CacheVarFunc)
+                  (Ast_c.str_of_name name) (file, exp_type)
       | Ast_c.Declaration
           (Ast_c.DeclList
             ([{Ast_c.v_namei = None;
@@ -190,14 +195,7 @@ let cache_name_visitor file =
             | Ast_c.Enum(_, def) ->
                 (* Cache enumeration constants *)
                 cache_enum_constants def
-            | Ast_c.TypeName(_, def) ->
-                (* TODO *)
-                k p
             | _ -> k p)
-      | Ast_c.CppTop
-          (Ast_c.Define (name, _)) ->
-            (* TODO *)
-            k p
       | _ -> k p
   }
 
@@ -259,10 +257,17 @@ let get_type_visitor file name exp_type l =
         Ast_c.Declaration
           (Ast_c.DeclList
             ([{Ast_c.v_namei = Some (n, _);
-              Ast_c.v_type = typ}, _], _))
-            when (Ast_c.str_of_name n) = name &&
-              exp_type = CacheVarFunc ->
-                get_type typ
+              Ast_c.v_type = typ;
+              Ast_c.v_storage = strg}, _], _))
+            when (Ast_c.str_of_name n) = name ->
+              let f _ =
+                match (fst strg), exp_type with
+                  Ast_c.StoTypedef, CacheTypedef
+                | Ast_c.NoSto, CacheVarFunc
+                | Ast_c.Sto _, CacheVarFunc ->
+                     get_type typ
+                | _ -> k p in
+              f ()
       | Ast_c.Declaration
           (Ast_c.DeclList
             ([{Ast_c.v_namei = None;
@@ -298,26 +303,29 @@ let get_type_from_name_cache file name exp_type parse_fn =
         end
         else find_file xs in
   let return_type fl l =
-    if List.length l <> 1
-    then begin
-      if List.length l > 1
-      then
-        pr_inc
-          ("INCLUDES CACHE: more than one type: "
-           ^ name ^ " | "^ file ^ " | "^ fl)
-      else if List.length l = 0
-      then
+    match (List.length l) with
+      x when x = 0 ->
         pr_inc
           ("INCLUDES CACHE: No type found: "
-           ^ name ^ " | "^ file ^ " | "^ fl);
-      None
-    end
-    else begin
-      pr_inc
-        ("INCLUDES CACHE: Found type: "
-         ^ name ^ " | "^ file ^ " | "^ fl);
-      Some (List.hd l)
-    end in
+           ^ name ^ " | "^ file ^" | "^ fl); None
+    | x when x > 1 ->
+        (match exp_type with
+          CacheVarFunc when Common.has_no_duplicate l ->
+            pr_inc
+              ("INCLUDES CACHE: more than one funvar, but same return types: "
+               ^ name ^ " | "^ file ^" | "^ fl); Some (List.hd l)
+        | CacheVarFunc ->
+            pr_inc
+              ("INCLUDES CACHE: more than one funvar: "
+               ^ name ^ " | "^ file ^" | "^ fl); None
+        | _ ->
+            pr_inc
+              ("INCLUDES CACHE: more than one type: "
+               ^ name ^ " | "^ file ^" | "^ fl); None)
+    | _ ->
+        pr_inc
+          ("INCLUDES CACHE: Found type: "
+           ^ name ^ " | "^ file ^ " | "^ fl); Some (List.hd l) in
   let get_ast x =
     match !cur_files with
       Some (a, n) when n = file ->

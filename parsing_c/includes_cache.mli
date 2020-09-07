@@ -8,6 +8,7 @@ type cache_exp =
   | CacheField of string (* Name of the struct/union it is defined in *)
   | CacheEnumConst
   | CacheVarFunc
+  | CacheTypedef
 
 (*val print_hashtable : unit -> unit*)
 
