@@ -98,7 +98,9 @@ let testone prefix x compare_with_expected =
   let base = if x =~ "\\(.*\\)_ver[0-9]+$" then matched1 x else x in
 
   let cfile =
-    if !Flag.c_plus_plus then prefix ^ x ^ ".cpp" else prefix ^ x ^ ".c" in
+    if !Flag.c_plus_plus <> Flag.Off
+    then prefix ^ x ^ ".cpp"
+    else prefix ^ x ^ ".c" in
   let cocci_file = prefix ^ base ^ ".cocci" in
 
   let expected_out = prefix ^ base ^ out_suffix in
@@ -203,6 +205,19 @@ let testall_bis extra_test expected_score_file update_score_file =
 	else raise (Impossible 164) in
       let base = if x =~ "\\(.*\\)_ver[0-9]+" then matched1 x else x in
       let cfile      = "tests/" ^ x ^ ".c" in
+      let cfile      =
+        let cppfile = "tests/" ^ x ^ ".cpp" in
+        if not (Sys.file_exists cfile) && Sys.file_exists cppfile
+        then
+          begin
+            Flag.c_plus_plus := Flag.On None;
+            cppfile
+          end
+        else
+          begin
+            Flag.c_plus_plus := Flag.Off;
+            cfile
+          end in
       let cocci_file = "tests/" ^ base ^ ".cocci" in
       let expected = "tests/" ^ res in
       let out = base ^ out_suffix in
@@ -429,7 +444,9 @@ let test_okfailed cocci_file cfiles =
           | None, false ->
               ()
           | Some outfile, false ->
-              let s =("PB: input file " ^ infile ^ " modified but no .res") in
+              let s =
+		Printf.sprintf
+		  "PB: input file %s modified but no %s" infile expected_res in
               push2 (infile^t_to_s Failed, [s;time_str]) final_files
 
           | x, true ->
@@ -543,7 +560,9 @@ let compare_with_expected outfiles extension =
     match outopt, Common.lfile_exists expected_res with
     | None, false -> ()
     | Some outfile, false ->
-        let s =("PB: input file " ^ infile ^ " modified but no .res") in
+        let s =
+	  Printf.sprintf
+	    "PB: input file %s modified but no %s" infile expected_res in
         pr2 s
     | x, true ->
         let outfile =

@@ -117,6 +117,11 @@ let dpdots e =
     Ast.DPdots(_) -> true
   | _ -> false
 
+let enumdots e =
+  match Ast.unwrap e with
+    Ast.EnumDots(_) -> true
+  | _ -> false
+
 let sdots s =
   match Ast.unwrap s with
     Ast.Dots(_,_,_,_) -> true
@@ -183,7 +188,8 @@ and unify_expression e1 e2 =
   match (Ast.unwrap e1,Ast.unwrap e2) with
     (Ast.Ident(i1),Ast.Ident(i2)) -> unify_ident i1 i2
   | (Ast.Constant(c1),Ast.Constant(c2))-> unify_mcode c1 c2
-  | (Ast.StringConstant(lq1,str1,rq1),Ast.StringConstant(lq2,str2,rq2)) ->
+  | (Ast.StringConstant(lq1,str1,rq1,sz1),Ast.StringConstant(lq2,str2,rq2,sz2)) ->
+      sz1 = sz2 &&
       unify_dots unify_string_fragment strdots str1 str2
   | (Ast.FunCall(f1,lp1,args1,rp1),Ast.FunCall(f2,lp2,args2,rp2)) ->
       unify_expression f1 f2 &&
@@ -214,8 +220,11 @@ and unify_expression e1 e2 =
       unify_expression e1 e2 && unify_ident fld1 fld2
   | (Ast.RecordPtAccess(e1,pt1,fld1),Ast.RecordPtAccess(e2,pt2,fld2)) ->
       unify_expression e1 e2 && unify_ident fld1 fld2
-  | (Ast.Cast(lp1,ty1,rp1,e1),Ast.Cast(lp2,ty2,rp2,e2)) ->
-      unify_fullType ty1 ty2 && unify_expression e1 e2
+  | (Ast.Cast(lp1,ty1,attr1,rp1,e1),Ast.Cast(lp2,ty2,attr2,rp2,e2)) ->
+      if (List.length attr1 = List.length attr2) &&
+         List.for_all2 unify_attribute attr1 attr2
+      then unify_fullType ty1 ty2 && unify_expression e1 e2
+      else false
   | (Ast.SizeOfExpr(szf1,e1),Ast.SizeOfExpr(szf2,e2)) ->
       unify_expression e1 e2
   | (Ast.SizeOfType(szf1,lp1,ty1,rp1),Ast.SizeOfType(szf2,lp2,ty2,rp2)) ->
@@ -327,14 +336,14 @@ and unify_typeC t1 t2 =
       then unify_option unify_typeC ty1 ty2
       else false
   | (Ast.Pointer(ty1,s1),Ast.Pointer(ty2,s2)) -> unify_fullType ty1 ty2
-  | (Ast.FunctionPointer(tya,lp1a,stara,rp1a,lp2a,paramsa,rp2a),
-     Ast.FunctionPointer(tyb,lp1b,starb,rp1b,lp2b,paramsb,rp2b)) ->
-       if List.for_all2 unify_mcode
-	   [lp1a;stara;rp1a;lp2a;rp2a] [lp1b;starb;rp1b;lp2b;rp2b]
-       then
-	 unify_fullType tya tyb &&
-	 unify_dots unify_parameterTypeDef pdots paramsa paramsb
-       else false
+  | (Ast.ParenType(lpa,tya,rpa),Ast.ParenType(lpb,tyb,rpb)) ->
+      unify_fullType tya tyb && unify_mcode lpa lpb && unify_mcode rpa rpb
+  | (Ast.FunctionType(tya,lpa,paramsa,rpa),
+     Ast.FunctionType(tyb,lpb,paramsb,rpb)) ->
+      unify_fullType tya tyb &&
+      unify_mcode lpa lpb &&
+      unify_dots unify_parameterTypeDef pdots paramsa paramsb &&
+      unify_mcode rpa rpb
   | (Ast.Array(ty1,lb1,e1,rb1),Ast.Array(ty2,lb2,e2,rb2)) ->
       unify_fullType ty1 ty2 && unify_option unify_expression e1 e2
   | (Ast.Decimal(dec1,lp1,len1,comma1,prec_opt1,rp1),
@@ -347,7 +356,7 @@ and unify_typeC t1 t2 =
       true
   | (Ast.EnumDef(ty1,lb1,ids1,rb1),Ast.EnumDef(ty2,lb2,ids2,rb2)) ->
       unify_fullType ty1 ty2 &&
-      unify_dots unify_expression edots ids1 ids2
+      unify_dots unify_enum_decl enumdots ids1 ids2
   | (Ast.StructUnionName(s1,Some ts1),Ast.StructUnionName(s2,Some ts2)) ->
       if unify_mcode s1 s2 then unify_ident ts1 ts2 else false
   | (Ast.StructUnionName(s1,None),Ast.StructUnionName(s2,None)) ->
@@ -361,6 +370,7 @@ and unify_typeC t1 t2 =
   | (Ast.TypeOfType(szf1,lp1,ty1,rp1),Ast.TypeOfType(szf2,lp2,ty2,rp2)) ->
       unify_fullType ty1 ty2
   | (Ast.TypeName(t1),Ast.TypeName(t2)) -> unify_mcode t1 t2
+  | (Ast.AutoType(auto1), Ast.AutoType(auto2)) -> unify_mcode auto1 auto2
 
   | (Ast.MetaType(_,_,_,_),_)
   | (_,Ast.MetaType(_,_,_,_)) -> true
@@ -377,7 +387,8 @@ and unify_declaration d1 d2 =
   | (Ast.Init(stg1,ft1,id1,attr1,eq1,i1,s1),
      Ast.Init(stg2,ft2,id2,attr2,eq2,i2,s2)) ->
       if bool_unify_option unify_mcode stg1 stg2 &&
-         List.for_all2 unify_mcode attr1 attr2
+         (List.length attr1 = List.length attr2) &&
+         List.for_all2 unify_attribute attr1 attr2
       then
 	unify_fullType ft1 ft2 &&
 	unify_ident id1 id2 &&
@@ -385,7 +396,8 @@ and unify_declaration d1 d2 =
       else false
   | (Ast.UnInit(stg1,ft1,id1,attr1,s1),Ast.UnInit(stg2,ft2,id2,attr2,s2)) ->
       if bool_unify_option unify_mcode stg1 stg2 &&
-         List.for_all2 unify_mcode attr1 attr2
+         (List.length attr1 = List.length attr2) &&
+         List.for_all2 unify_attribute attr1 attr2
       then unify_fullType ft1 ft2 && unify_ident id1 id2
       else false
   | (Ast.FunProto(fi1,nm1,lp1,params1,va1,rp1,sem1),
@@ -402,9 +414,11 @@ and unify_declaration d1 d2 =
 	  unify_ident nm1 nm2 &&
 	  unify_dots unify_parameterTypeDef pdots params1 params2
        else false
-  | (Ast.MacroDecl(s1,n1,lp1,args1,rp1,sem1),
-     Ast.MacroDecl(s2,n2,lp2,args2,rp2,sem2)) ->
-       if bool_unify_option unify_mcode s1 s2
+  | (Ast.MacroDecl(s1,n1,lp1,args1,rp1,attr1,sem1),
+     Ast.MacroDecl(s2,n2,lp2,args2,rp2,attr2,sem2)) ->
+       if bool_unify_option unify_mcode s1 s2 &&
+         (List.length attr1 = List.length attr2) &&
+         List.for_all2 unify_attribute attr1 attr2
        then
 	 unify_ident n1 n2 &&
 	 unify_dots unify_expression edots args1 args2
@@ -417,7 +431,11 @@ and unify_declaration d1 d2 =
 	 unify_dots unify_expression edots args1 args2 &&
 	 unify_initialiser ini1 ini2
        else false
-  | (Ast.TyDecl(ft1,s1),Ast.TyDecl(ft2,s2)) -> unify_fullType ft1 ft2
+  | (Ast.TyDecl(ft1,attr1,s1),Ast.TyDecl(ft2,attr2,s2)) ->
+      if (List.length attr1 = List.length attr2) &&
+         List.for_all2 unify_attribute attr1 attr2
+      then unify_fullType ft1 ft2
+      else false
   | (Ast.Typedef(stg1,ft1,id1,s1),Ast.Typedef(stg2,ft2,id2,s2)) ->
       unify_fullType ft1 ft2 && unify_typeC id1 id2
   | (Ast.DisjDecl(d1),_) ->
@@ -454,26 +472,39 @@ and unify_field d1 d2 =
 	unify_mcode c1 c2 && unify_expression e1 e2 in
       unify_fullType ft1 ft2 && unify_option unify_ident id1 id2 &&
       unify_option unify_bitfield bf1 bf2
-  | (Ast.DisjField(d1),_) ->
-      disjunct_all_bindings
-	(List.map (function x -> unify_field x d2) d1)
-  | (_,Ast.DisjField(d2)) ->
-      disjunct_all_bindings
-	(List.map (function x -> unify_field d1 x) d2)
-  | (Ast.ConjField(d1),_) ->
-      conjunct_all_bindings
-	(List.map (function x -> unify_field x d2) d1)
-  | (_,Ast.ConjField(d2)) ->
-      conjunct_all_bindings
-	(List.map (function x -> unify_field d1 x) d2)
-  | (Ast.OptField(_),_)
-  | (_,Ast.OptField(_)) -> failwith "unsupported decl"
 
 and unify_annotated_field d1 d2 =
   match (Ast.unwrap d1,Ast.unwrap d2) with
     (Ast.FElem(_,_,d1),Ast.FElem(_,_,d2)) -> unify_field d1 d2
   (* dots can match against anything.  true to be safe. *)
   | (Ast.Fdots(_,_),_) | (_,Ast.Fdots(_,_)) -> true
+  | (Ast.DisjField(d1),_) ->
+      disjunct_all_bindings
+	(List.map (function x -> unify_annotated_field x d2) d1)
+  | (_,Ast.DisjField(d2)) ->
+      disjunct_all_bindings
+	(List.map (function x -> unify_annotated_field d1 x) d2)
+  | (Ast.ConjField(d1),_) ->
+      conjunct_all_bindings
+	(List.map (function x -> unify_annotated_field x d2) d1)
+  | (_,Ast.ConjField(d2)) ->
+      conjunct_all_bindings
+	(List.map (function x -> unify_annotated_field d1 x) d2)
+  | (Ast.OptField(_),_)
+  | (_,Ast.OptField(_)) -> failwith "unsupported decl"
+
+and unify_enum_decl d1 d2 =
+  match (Ast.unwrap d1,Ast.unwrap d2) with
+    (Ast.Enum(name1,enum_val1),Ast.Enum(name2,enum_val2)) ->
+       unify_ident name1 name2 &&
+       unify_option
+         (function a -> function b ->
+            let (_,eval1) = a in
+            let (_,eval2) = b in
+            unify_expression eval1 eval2) enum_val1 enum_val2
+  | (Ast.EnumComma(_),(Ast.EnumComma(_))) -> true
+  | (Ast.EnumDots(_),(Ast.EnumDots(_))) -> true
+  | _ -> false
 
 (* --------------------------------------------------------------------- *)
 (* Initializer *)
@@ -522,11 +553,18 @@ and unify_designator d1 d2 =
 
 and unify_parameterTypeDef p1 p2 =
   match (Ast.unwrap p1,Ast.unwrap p2) with
-    (Ast.VoidParam(ft1),Ast.VoidParam(ft2)) -> unify_fullType ft1 ft2
-  | (Ast.Param(ft1,i1),Ast.Param(ft2,i2)) ->
-      unify_fullType ft1 ft2 &&
-      unify_option unify_ident i1 i2
-
+    (Ast.VoidParam(ft1,attr1),Ast.VoidParam(ft2,attr2)) ->
+      if (List.length attr1 = List.length attr2) &&
+         List.for_all2 unify_attribute attr1 attr2
+      then unify_fullType ft1 ft2
+      else false
+  | (Ast.Param(ft1,i1,attr1),Ast.Param(ft2,i2,attr2)) ->
+      if (List.length attr1 = List.length attr2) &&
+         List.for_all2 unify_attribute attr1 attr2
+      then
+        unify_fullType ft1 ft2 &&
+        unify_option unify_ident i1 i2
+      else false
   | (Ast.MetaParam(_,_,_,_),_)
   | (Ast.MetaParamList(_,_,_,_,_),_)
   | (_,Ast.MetaParam(_,_,_,_))
@@ -672,7 +710,7 @@ and unify_fninfo patterninfo cinfo =
     | (Ast.FInline(ia)::resta,Ast.FInline(ib)::restb) ->
 	if unify_mcode ia ib then loop (resta,restb) else false
     | (Ast.FAttr(ia)::resta,Ast.FAttr(ib)::restb) ->
-	if unify_mcode ia ib then loop (resta,restb) else false
+	if unify_attribute ia ib then loop (resta,restb) else false
     | (x::resta,((y::_) as restb)) ->
 	(match compare x y with
 	  -1 -> false
@@ -680,6 +718,13 @@ and unify_fninfo patterninfo cinfo =
 	| _ -> failwith "not possible")
     | _ -> false in
   loop (patterninfo,cinfo)
+
+and unify_attribute attr1 attr2 =
+  match (Ast.unwrap attr1,Ast.unwrap attr2) with
+    (Ast.Attribute(attr1),Ast.Attribute(attr2)) ->
+      unify_mcode attr1 attr2
+  | (Ast.MetaAttribute(_,_,_,_),_)
+  | (_,Ast.MetaAttribute(_,_,_,_)) -> true
 
 and unify_exec_code ec1 ec2 =
   match (Ast.unwrap ec1,Ast.unwrap ec2) with
@@ -699,10 +744,11 @@ and subexp f =
   let recursor = V.combiner bind option_default
       mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
       mcode mcode
-      donothing donothing donothing donothing donothing donothing donothing expr
+      donothing donothing donothing donothing donothing donothing donothing
+      donothing expr
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
-      donothing donothing donothing donothing in
+      donothing donothing donothing donothing donothing donothing in
   recursor.V.combiner_rule_elem
 
 and subtype f =
@@ -715,10 +761,10 @@ and subtype f =
       mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
       mcode mcode
       donothing donothing donothing donothing donothing donothing donothing
-      donothing donothing donothing donothing donothing fullType
+      donothing donothing donothing donothing donothing donothing fullType
       donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing
-      donothing in
+      donothing donothing donothing in
   recursor.V.combiner_rule_elem
 
 let rec unify_statement s1 s2 =

@@ -15,12 +15,14 @@ type typeC =
   | BaseType        of baseType
   | SignedT         of sign * typeC option
   | Pointer         of typeC
-  | FunctionPointer of typeC (* only return type *)
+  | ParenType       of typeC (* only return type *)
+  | FunctionType    of typeC (* only return type *)
   | Array           of typeC (* drop size info *)
   | Decimal         of name * name
   | EnumName        of name
   | StructUnionName of structUnion * name
   | TypeName        of string
+  | AutoType
   | MetaType        of meta_name * keep_binding * inherited
   | Unknown (* for metavariables of type expression *^* *)
 

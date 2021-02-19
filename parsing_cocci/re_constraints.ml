@@ -31,7 +31,7 @@ let disj_free re =
     match Ast.unwrap e with Ast.DisjType _ -> false | _ -> k e in
   let decl r k e =
     match Ast.unwrap e with Ast.DisjDecl _ -> false | _ -> k e in
-  let field r k e =
+  let ann_field r k e =
     match Ast.unwrap e with Ast.DisjField _ -> false | _ -> k e in
   let rule_elem r k e =
     match Ast.unwrap e with Ast.DisjRuleElem _ -> false | _ -> k e in
@@ -41,10 +41,10 @@ let disj_free re =
     V.combiner bind option_default
     mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
     mcode mcode
-    donothing donothing donothing donothing donothing donothing ident
+    donothing donothing donothing donothing donothing donothing donothing ident
     expr donothing donothing donothing donothing ty donothing
-    donothing donothing donothing decl donothing field donothing
-    rule_elem statement donothing donothing donothing in
+    donothing donothing donothing decl donothing donothing ann_field donothing
+    rule_elem statement donothing donothing donothing donothing in
   try Hashtbl.find disj_free_table re
   with Not_found ->
     let res = v.V.combiner_rule_elem re in
@@ -62,16 +62,25 @@ let ok_for_all_rule_elems cstr minirules =
     let available = Ast.get_minus_nc_fvs re in
     if List.mem self available
     then
-      let res =
-	(List.for_all (fun x -> List.mem x available) (List.map fst params)) &&
-	(disj_free re) in
-      if res
-      then res
+      let params_available =
+	List.for_all (fun x -> List.mem x available) (List.map fst params) in
+      if params_available
+      then
+	let disj_free = disj_free re in
+	if disj_free
+	then true
+	else
+	  failwith
+	    (Printf.sprintf
+	       "%s: constraint on variable %s cannot be evaluated in line %d due to disjunction\n%s"
+	       (fst self) (snd self) (Ast.get_line re)
+	       (Pretty_print_cocci.rule_elem_to_string re))
       else
 	failwith
 	  (Printf.sprintf
-	     "%s: constraint on variable %s cannot be evaluated in line %d. available: %s"
-	     (fst self) (snd self) (Ast.get_line re) (Dumper.dump available))
+	     "%s: constraint on variable %s cannot be evaluated in line %d. available: %s\nwanted: %s"
+	     (fst self) (snd self) (Ast.get_line re) (Dumper.dump available)
+	     (Dumper.dump (List.map fst params)))
     else true (* not relevant to this rule_elem *) in
 
   let v =
@@ -81,7 +90,8 @@ let ok_for_all_rule_elems cstr minirules =
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
-      rule_elem donothing donothing donothing donothing in
+      donothing donothing rule_elem donothing donothing donothing donothing
+      donothing in
   List.for_all v.V.combiner_top_level minirules
 
 let update_for_all_rule_elems cstr minirules =
@@ -102,9 +112,10 @@ let update_for_all_rule_elems cstr minirules =
       mcode mcode
       donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing
-      donothing donothing donothing donothing
-      donothing donothing donothing donothing
-      donothing rule_elem donothing donothing donothing donothing in
+      donothing donothing donothing donothing donothing
+      donothing donothing donothing donothing donothing
+      donothing rule_elem donothing donothing donothing donothing
+      donothing in
   List.map v.V.rebuilder_top_level minirules
 
 let remove rule_name ((nm,_) as x) =

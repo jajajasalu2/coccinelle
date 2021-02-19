@@ -95,7 +95,7 @@ and base_expression =
     Ident          of ident
   | Constant       of Ast_cocci.constant mcode
   | StringConstant of string mcode (* quote *) * string_fragment dots *
-		      string mcode (* quote *)
+		      string mcode (* quote *) * Ast_cocci.isWchar
   | FunCall        of expression * string mcode (* ( *) *
                       expression dots * string mcode (* ) *)
   | Assignment     of expression * assignOp * expression *
@@ -114,8 +114,8 @@ and base_expression =
 	              string mcode (* ] *)
   | RecordAccess   of expression * string mcode (* . *) * ident
   | RecordPtAccess of expression * string mcode (* -> *) * ident
-  | Cast           of string mcode (* ( *) * typeC * string mcode (* ) *) *
-                      expression
+  | Cast           of string mcode (* ( *) * typeC * attr list *
+                      string mcode (* ) *) * expression
   | SizeOfExpr     of string mcode (* sizeof *) * expression
   | SizeOfType     of string mcode (* sizeof *) * string mcode (* ( *) *
                       typeC * string mcode (* ) *)
@@ -191,9 +191,9 @@ and base_typeC =
   | BaseType        of Ast_cocci.baseType * string mcode list
   | Signed          of Ast_cocci.sign mcode * typeC option
   | Pointer         of typeC * string mcode (* * *)
-  | FunctionPointer of typeC *
-	          string mcode(* ( *)*string mcode(* * *)*string mcode(* ) *)*
-                  string mcode (* ( *)*parameter_list*string mcode(* ) *)
+  | ParenType       of string mcode (* ( *) * typeC * string mcode (* ) *)
+  | FunctionType    of typeC *
+                  string mcode (* ( *) * parameter_list * string mcode (* ) *)
   | Array           of typeC * string mcode (* [ *) *
 	               expression option * string mcode (* ] *)
   | Decimal         of string mcode (* decimal *) * string mcode (* ( *) *
@@ -202,7 +202,7 @@ and base_typeC =
 	               string mcode (* ) *) (* IBM C only *)
   | EnumName        of string mcode (*enum*) * ident option (* name *)
   | EnumDef  of typeC (* either StructUnionName or metavar *) *
-	string mcode (* { *) * expression dots * string mcode (* } *)
+	string mcode (* { *) * enum_decl dots * string mcode (* } *)
   | StructUnionName of Ast_cocci.structUnion mcode * ident option (* name *)
   | StructUnionDef  of typeC (* either StructUnionName or metavar *) *
 	string mcode (* { *) * field dots * string mcode (* } *)
@@ -211,6 +211,7 @@ and base_typeC =
   | TypeOfType      of string mcode (* typeof *) * string mcode (* ( *) *
                        typeC * string mcode (* ) *)
   | TypeName        of string mcode
+  | AutoType        of string mcode (* auto *) (* c++ >= 11 *)
   | MetaType        of Ast_cocci.meta_name mcode * constraints
 	* pure
   | AsType          of typeC * typeC (* as type, always metavar *)
@@ -239,10 +240,11 @@ and base_declaration =
 	string mcode (* ( *) * parameter_list *
         (string mcode (* , *) * string mcode (* ...... *) ) option *
 	string mcode (* ) *) * string mcode (* ; *)
-  | TyDecl of typeC * string mcode (* ; *)
+  | TyDecl of typeC * attr list * string mcode (* ; *)
   | MacroDecl of Ast_cocci.storage mcode option *
 	ident (* name *) * string mcode (* ( *) *
-        expression dots * string mcode (* ) *) * string mcode (* ; *)
+        expression dots * string mcode (* ) *) *
+        attr list * string mcode (* ; *)
   | MacroDeclInit of Ast_cocci.storage mcode option *
 	ident (* name *) * string mcode (* ( *) *
         expression dots * string mcode (* ) *) * string mcode (*=*) *
@@ -275,6 +277,14 @@ and base_field =
 and bitfield = string mcode (* : *) * expression
 
 and field = base_field wrap
+
+and base_enum_decl =
+    Enum of ident * (string mcode (* = *) * expression) option
+  | EnumComma of string mcode (* , *)
+  | EnumDots of string mcode (* ... *) * (string mcode * string mcode *
+                enum_decl) option (* whencode *)
+
+and enum_decl = base_enum_decl wrap
 
 (* --------------------------------------------------------------------- *)
 (* Initializers *)
@@ -311,8 +321,8 @@ and initialiser_list = initialiser dots
 (* Parameter *)
 
 and base_parameterTypeDef =
-    VoidParam     of typeC
-  | Param         of typeC * ident option
+    VoidParam     of typeC * attr list
+  | Param         of typeC * ident option * attr list
   | MetaParam     of Ast_cocci.meta_name mcode * constraints * pure
   | MetaParamList of Ast_cocci.meta_name mcode * listlen * constraints * pure
   | AsParam       of parameterTypeDef * expression (* expr, always metavar *)
@@ -435,7 +445,11 @@ and fninfo =
   | FInline of string mcode
   | FAttr of attr
 
-and attr = string mcode
+and base_attr =
+    Attribute of string mcode
+  | MetaAttribute of Ast_cocci.meta_name mcode * constraints * pure
+
+and attr = base_attr wrap
 
 and ('a,'b) whencode =
     WhenNot of string mcode (* when *) * string mcode (* != *) * 'a
@@ -534,6 +548,7 @@ and anything =
   | DotsStmtTag of statement dots
   | DotsDeclTag of declaration dots
   | DotsFieldTag of field dots
+  | DotsEnumDeclTag of enum_decl dots
   | DotsCaseTag of case_line dots
   | DotsDefParamTag of define_param dots
   | IdentTag of ident
@@ -547,10 +562,12 @@ and anything =
   | InitTag of initialiser
   | DeclTag of declaration
   | FieldTag of field
+  | EnumDeclTag of enum_decl
   | StmtTag of statement
   | ForInfoTag of forinfo
   | CaseLineTag of case_line
   | StringFragmentTag of string_fragment
+  | AttributeTag of attr
   | TopTag of top_level
   | IsoWhenTag of Ast_cocci.when_modifier (*only for when code, in iso phase*)
   | IsoWhenTTag of expression(*only for when code, in iso phase*)
@@ -566,6 +583,7 @@ val dotsParam : parameterTypeDef dots -> anything
 val dotsStmt : statement dots -> anything
 val dotsDecl : declaration dots -> anything
 val dotsField : field dots -> anything
+val dotsEnumDecl : enum_decl dots -> anything
 val dotsCase : case_line dots -> anything
 val dotsDefParam : define_param dots -> anything
 val ident : ident -> anything
@@ -577,10 +595,12 @@ val param : parameterTypeDef -> anything
 val ini : initialiser -> anything
 val decl : declaration -> anything
 val field : field -> anything
+val enum_decl : enum_decl -> anything
 val stmt : statement -> anything
 val forinfo : forinfo -> anything
 val case_line : case_line -> anything
 val string_fragment : string_fragment -> anything
+val attr : attr -> anything
 val top : top_level -> anything
 
 (* --------------------------------------------------------------------- *)

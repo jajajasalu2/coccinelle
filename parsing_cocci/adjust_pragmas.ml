@@ -54,15 +54,15 @@ let rec right_decl d =
   | Ast0.FunProto(fninfo,id,lp1,params,va,rp1,sem) ->
       call_right right_mcode sem d
 	(function ty -> Ast0.FunProto(fninfo,id,lp1,params,va,rp1,sem))
-  | Ast0.MacroDecl(stg,name,lp,args,rp,sem) ->
+  | Ast0.MacroDecl(stg,name,lp,args,rp,attr,sem) ->
       call_right right_mcode sem d
-	(function sem -> Ast0.MacroDecl(stg,name,lp,args,rp,sem))
+	(function sem -> Ast0.MacroDecl(stg,name,lp,args,rp,attr,sem))
   | Ast0.MacroDeclInit(stg,name,lp,args,rp,eq,ini,sem) ->
       call_right right_mcode sem d
 	(function sem -> Ast0.MacroDeclInit(stg,name,lp,args,rp,eq,ini,sem))
-  | Ast0.TyDecl(ty,sem) ->
+  | Ast0.TyDecl(ty,attr,sem) ->
       call_right right_mcode sem d
-	(function sem -> Ast0.TyDecl(ty,sem))
+	(function sem -> Ast0.TyDecl(ty,attr,sem))
   | Ast0.Typedef(stg,ty,id,sem) ->
       call_right right_mcode sem d
 	(function sem -> Ast0.Typedef(stg,ty,id,sem))
@@ -168,9 +168,10 @@ let rec left_ty t =
       call_right left_mcode sign t (function sign -> Ast0.Signed(sign,ty))
   | Ast0.Pointer(ty,star) ->
       call_right left_ty ty t (function ty -> Ast0.Pointer(ty,star))
-  | Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-      call_right left_ty ty t
-	(function ty -> Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2))
+  | Ast0.ParenType(lp,ty,rp) ->
+      call_right left_mcode lp t (function lp -> Ast0.ParenType(lp,ty,rp))
+  | Ast0.FunctionType(ty,lp,params,rp) ->
+      call_right left_ty ty t (function ty -> Ast0.FunctionType(ty,lp,params,rp))
   | Ast0.Array(ty,lb,size,rb) ->
       call_right left_ty ty t (function ty -> Ast0.Array(ty,lb,size,rb))
   | Ast0.Decimal(dec,lp,length,comma,precision_opt,rp) ->
@@ -193,6 +194,8 @@ let rec left_ty t =
       call_right left_mcode tf t (function tf -> Ast0.TypeOfType(tf,lb,ty,rb))
   | Ast0.TypeName(name) ->
       call_right left_mcode name t (function name -> Ast0.TypeName(name))
+  | Ast0.AutoType(auto) ->
+      call_right left_mcode auto t (function auto -> Ast0.AutoType(auto))
   | Ast0.MetaType(name,cstr,x) ->
       call_right left_mcode name t (function name -> Ast0.MetaType(name,cstr,x))
   | Ast0.AsType(ty,asty) -> failwith "not possible"
@@ -218,6 +221,14 @@ let rec left_ident i =
       call_right left_ident id i (function id -> Ast0.OptIdent(id))
   | Ast0.AsIdent(id,asid) -> failwith "not possible"
 
+let left_attribute attr =
+  match Ast0.unwrap attr with
+    Ast0.Attribute(a) ->
+      call_right left_mcode a attr (function a -> Ast0.Attribute(a))
+  | Ast0.MetaAttribute(name,a,b) ->
+      call_right left_mcode name attr
+        (function name -> Ast0.MetaAttribute(name,a,b))
+
 let left_fundecl name fninfo =
   let fncall_right processor data cont =
     match processor data with
@@ -235,7 +246,7 @@ let left_fundecl name fninfo =
   | (Ast0.FInline inl)::x ->
       fncall_right left_mcode inl (function inl -> (Ast0.FInline inl)::x)
   | (Ast0.FAttr atr)::x ->
-      fncall_right left_mcode atr (function atr -> (Ast0.FAttr atr)::x)
+      fncall_right left_attribute atr (function atr -> (Ast0.FAttr atr)::x)
 
 let rec left_decl decl =
   match Ast0.unwrap decl with
@@ -273,15 +284,15 @@ let rec left_decl decl =
 	    (function inl ->
 	      Ast0.FunProto((Ast0.FInline inl)::x,name,lp1,params,va,rp1,sem))
       | (Ast0.FAttr attr)::x ->
-	  call_right left_mcode attr decl
+	  call_right left_attribute attr decl
 	    (function attr ->
 	      Ast0.FunProto((Ast0.FAttr attr)::x,name,lp1,params,va,rp1,sem)))
-  | Ast0.MacroDecl(Some stg,name,lp,args,rp,sem) ->
+  | Ast0.MacroDecl(Some stg,name,lp,args,rp,attr,sem) ->
       call_right left_mcode stg decl
-	(function stg -> Ast0.MacroDecl(Some stg,name,lp,args,rp,sem))
-  | Ast0.MacroDecl(None,name,lp,args,rp,sem) ->
+	(function stg -> Ast0.MacroDecl(Some stg,name,lp,args,rp,attr,sem))
+  | Ast0.MacroDecl(None,name,lp,args,rp,attr,sem) ->
       call_right left_ident name decl
-	(function name -> Ast0.MacroDecl(None,name,lp,args,rp,sem))
+	(function name -> Ast0.MacroDecl(None,name,lp,args,rp,attr,sem))
   | Ast0.MacroDeclInit(Some stg,name,lp,args,rp,eq,ini,sem) ->
       call_right left_mcode stg decl
 	(function stg ->
@@ -289,8 +300,8 @@ let rec left_decl decl =
   | Ast0.MacroDeclInit(None,name,lp,args,rp,eq,ini,sem) ->
       call_right left_ident name decl
 	(function name -> Ast0.MacroDeclInit(None,name,lp,args,rp,eq,ini,sem))
-  | Ast0.TyDecl(ty,sem) ->
-      call_right left_ty ty decl (function ty -> Ast0.TyDecl(ty,sem))
+  | Ast0.TyDecl(ty,attr,sem) ->
+      call_right left_ty ty decl (function ty -> Ast0.TyDecl(ty,attr,sem))
   | Ast0.Typedef(stg,ty,id,sem) ->
       call_right left_mcode stg decl
 	(function stg -> Ast0.Typedef(stg,ty,id,sem))

@@ -192,9 +192,12 @@ let rec type_pos t snp
   | Ast0.Pointer(t,star) ->
       let constructor ~mc = Ast0.Pointer(t,mc) in
       mcode_wrap ~mc:star ~constructor snp
-  | Ast0.FunctionPointer(t,lp,star,rp,lp2,params,rp2) ->
-      let constructor ~mc = Ast0.FunctionPointer(t,lp,star,rp,lp2,params,mc) in
-      mcode_wrap ~mc:rp2 ~constructor snp
+  | Ast0.ParenType(lp,t,rp) ->
+      let constructor ~mc = Ast0.ParenType(lp,t,rp) in
+      mcode_wrap ~mc:rp ~constructor snp
+  | Ast0.FunctionType(t,lp,params,rp) ->
+      let constructor ~mc = Ast0.FunctionType(t,lp,params,rp) in
+      mcode_wrap ~mc:rp ~constructor snp
   | Ast0.Array(t,lb,expr,rb) ->
       let constructor ~mc = Ast0.Array(t,lb,expr,mc) in
       mcode_wrap ~mc:rb ~constructor snp
@@ -231,6 +234,9 @@ let rec type_pos t snp
   | Ast0.TypeName(nm) ->
       let constructor ~mc = Ast0.TypeName(mc) in
       mcode_wrap ~mc:nm ~constructor snp
+  | Ast0.AutoType(auto) ->
+      let constructor ~mc = Ast0.AutoType(mc) in
+      mcode_wrap ~mc:auto ~constructor snp
   | Ast0.MetaType(mnmc,cstr,pure) ->
       let constructor ~mc = Ast0.MetaType(mc,cstr,pure) in
       mcode_wrap ~mc:mnmc ~constructor snp
@@ -292,8 +298,8 @@ let rec expression_pos exp snp
   | Ast0.Constant(mc) ->
       let constructor ~mc = Ast0.Constant mc in
       mcode_wrap ~mc ~constructor snp
-  | Ast0.StringConstant(q1, sd, q2) ->
-      let constructor ~mc = Ast0.StringConstant (q1, sd, mc) in
+  | Ast0.StringConstant(q1, sd, q2, sz) ->
+      let constructor ~mc = Ast0.StringConstant (q1, sd, mc, sz) in
       mcode_wrap ~mc:q2 ~constructor snp
   | Ast0.FunCall(exp, lp, expdots, rp) ->
       let c ~exp ~mc = Ast0.FunCall(exp, mc, expdots, rp) in
@@ -353,9 +359,9 @@ let rec expression_pos exp snp
       let c ~exp ~id = Ast0.RecordPtAccess(exp, arrow, id) in
       let alt() = id_wrap ~id ~constructor:(c ~exp) snp in
       exp_wrap ~exp ~constructor:(c ~id) ~alt snp
-  | Ast0.Cast(lp, typec, rp, exp) ->
+  | Ast0.Cast(lp, typec, attr, rp, exp) ->
       let _ = type_pos typec snp in (* sanity check for disj *)
-      let c ~exp ~mc = Ast0.Cast(lp, typec, mc, exp) in
+      let c ~exp ~mc = Ast0.Cast(lp, typec, attr, mc, exp) in
       let alt() = mcode_wrap ~mc:rp ~constructor:(c ~exp) snp in
       exp_wrap ~exp ~constructor:(c ~mc:rp) ~alt snp
   | Ast0.SizeOfExpr(sizeofmc, exp) ->
@@ -406,15 +412,15 @@ let rec declaration_pos decl snp
       let _ = type_pos ty snp in (* sanity check *)
       let constructor ~id = Ast0.UnInit(st, ty, id, attr, sem) in
       id_wrap ~id ~constructor snp
-  | Ast0.TyDecl (t, sem) ->
-      let c ~item ~mc = Ast0.TyDecl(item, mc) in
+  | Ast0.TyDecl (t, attr, sem) ->
+      let c ~item ~mc = Ast0.TyDecl(item, attr, mc) in
       let alt() = mcode_wrap ~mc:sem ~constructor:(c ~item:t) snp in
       item_wrap ~item:t ~item_posfn:type_pos ~constructor:(c ~mc:sem) ~alt snp
   | Ast0.Typedef (tm, tc, tc2, sem) ->
       let constructor ~mc = Ast0.Typedef (mc, tc, tc2, sem) in
       mcode_wrap ~mc:tm ~constructor snp
-  | Ast0.MacroDecl (st,id,lp,ed,rp,sem) ->
-      let constructor ~id = Ast0.MacroDecl (st, id, lp, ed, rp, sem) in
+  | Ast0.MacroDecl (st,id,lp,ed,rp,attr,sem) ->
+      let constructor ~id = Ast0.MacroDecl (st, id, lp, ed, rp, attr, sem) in
       id_wrap ~id ~constructor snp
   | Ast0.MacroDeclInit (st,id,lp,ed,rp,eq,init,sem) ->
       let constructor ~id = Ast0.MacroDeclInit (st,id,lp,ed,rp,eq,init,sem) in

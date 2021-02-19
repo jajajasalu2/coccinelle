@@ -98,30 +98,29 @@ let collect_refs include_constraints =
     | Some l -> listlen l in
 
   let astfvexpr recursor k e =
-    bind (k e)
-      (match Ast.unwrap e with
-	Ast.MetaExpr(name,constraints,_,Some type_list,_,_,bitfield) ->
-	  let types =
+    match Ast.unwrap e with
+      Ast.MetaExpr(name,constraints,_,Some type_list,_,_,bitfield) ->
+	let types =
 	    (* problem: if there are multiple types, then none in particular
 	       is needed *)
-	    if include_constraints || List.length type_list = 1
-	    then List.fold_left type_collect option_default type_list
-	    else [] in
-	  let extra =
-	    if include_constraints
-	    then Ast.cstr_pos_meta_names constraints
-	    else [] in
-	  let bitfield' = listlen_option bitfield in
-	  bind bitfield' (bind extra (bind [metaid name] types))
-      | Ast.MetaErr(name,cstr,_,_) ->
-	  bind (constraints cstr) [metaid name]
-      | Ast.MetaExpr(name,cstr,_,_,_,_,bitfield) ->
-	  let bitfield' = listlen_option bitfield in
-	  bind bitfield' (bind (constraints cstr) [metaid name])
-      | Ast.MetaExprList(name,len,cstr,_,_) ->
-	  bind (constraints cstr) (bind (listlen len) [metaid name])
-      | Ast.DisjExpr(exps) -> bind_disj (List.map k exps)
-      | _ -> option_default) in
+	  if include_constraints || List.length type_list = 1
+	  then List.fold_left type_collect option_default type_list
+	  else [] in
+	let extra =
+	  if include_constraints
+	  then Ast.cstr_pos_meta_names constraints
+	  else [] in
+	let bitfield' = listlen_option bitfield in
+	bind (k e) (bind bitfield' (bind extra (bind [metaid name] types)))
+    | Ast.MetaErr(name,cstr,_,_) ->
+	bind (k e) (bind (constraints cstr) [metaid name])
+    | Ast.MetaExpr(name,cstr,_,_,_,_,bitfield) ->
+	let bitfield' = listlen_option bitfield in
+	bind (k e) (bind bitfield' (bind (constraints cstr) [metaid name]))
+    | Ast.MetaExprList(name,len,cstr,_,_) ->
+	bind (k e) (bind (constraints cstr) (bind (listlen len) [metaid name]))
+    | Ast.DisjExpr(exps) -> bind_disj (List.map k exps)
+    | _ -> k e in
 
   let astfvfrag recursor k ft =
     bind (k ft)
@@ -135,6 +134,13 @@ let collect_refs include_constraints =
     bind (k ft)
       (match Ast.unwrap ft with
 	Ast.MetaFormat(name,cstr,_,_) ->
+	  bind (constraints cstr) [metaid name]
+      | _ -> option_default) in
+
+  let astfvattribute recursor k a =
+    bind (k a)
+      (match Ast.unwrap a with
+	Ast.MetaAttribute(name,cstr,_,_) ->
 	  bind (constraints cstr) [metaid name]
       | _ -> option_default) in
 
@@ -157,12 +163,12 @@ let collect_refs include_constraints =
     bind (k bop) (collect_binary_names bop) in
 
   let astfvdecls recursor k d =
-    bind (k d)
-      (match Ast.unwrap d with
-	Ast.MetaDecl(name,cstr,_,_) ->
-	  bind (constraints cstr) [metaid name]
-      | Ast.DisjDecl(decls) -> bind_disj (List.map k decls)
-      | _ -> option_default) in
+    match Ast.unwrap d with
+      Ast.MetaDecl(name,cstr,_,_) ->
+	bind (k d)
+	  (bind (constraints cstr) [metaid name])
+    | Ast.DisjDecl(decls) -> bind_disj (List.map k decls)
+    | _ -> k d in
 
   let astfvfields recursor k d =
     bind (k d)
@@ -171,14 +177,17 @@ let collect_refs include_constraints =
 	  bind (constraints cstr) [metaid name]
       | Ast.MetaFieldList(name,len,cstr,_,_) ->
 	  bind (constraints cstr) (bind (listlen len) [metaid name])
-      | Ast.DisjField(decls) -> bind_disj (List.map k decls)
       | _ -> option_default) in
 
+  let astafvfields recursor k d =
+    match Ast.unwrap d with
+    | Ast.DisjField(decls) -> bind_disj (List.map k decls)
+    | _ -> k d in
+
   let astfvfullType recursor k ty =
-    bind (k ty)
-      (match Ast.unwrap ty with
-	Ast.DisjType(types) -> bind_disj (List.map k types)
-      | _ -> option_default) in
+    match Ast.unwrap ty with
+      Ast.DisjType(types) -> bind_disj (List.map k types)
+    | _ -> k ty in
 
   let astfvtypeC recursor k ty =
     bind (k ty)
@@ -223,11 +232,10 @@ let collect_refs include_constraints =
 	 | _ -> option_default)) in
 
   let astfvstatement recursor k s =
-    bind (k s)
-      (match Ast.unwrap s with
-	Ast.Disj(stms) ->
-	  bind_disj (List.map recursor.V.combiner_statement_dots stms)
-      | _ -> option_default) in
+    match Ast.unwrap s with
+      Ast.Disj(stms) ->
+	bind_disj (List.map recursor.V.combiner_statement_dots stms)
+    | _ -> k s in
 
   let mcode r mc = (*
     if include_constraints
@@ -248,11 +256,12 @@ let collect_refs include_constraints =
   V.combiner bind option_default
     mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
     mcode mcode mcode mcode
-    donothing donothing donothing donothing donothing donothing
+    donothing donothing donothing donothing donothing donothing donothing
     astfvident astfvexpr astfvfrag astfvfmt astfvassignop astfvbinaryop
     astfvfullType astfvtypeC astfvinit astfvparam astfvdefine_param
-    astfvdecls donothing astfvfields donothing
-    astfvrule_elem astfvstatement donothing donothing donothing_a
+    astfvdecls donothing astfvfields astafvfields donothing
+    astfvrule_elem astfvstatement donothing astfvattribute
+    donothing donothing_a
 
 let collect_all_refs = collect_refs true
 let collect_non_constraint_refs = collect_refs false
@@ -298,11 +307,11 @@ let collect_pos_positions =
   V.combiner bind option_default
     mcode mcode mcode mcode mcode mcode mcode mcode mcode
     mcode mcode mcode mcode mcode
-    donothing donothing donothing donothing donothing
+    donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing
-    donothing donothing donothing
-    cprule_elem cpstmt donothing donothing donothing
+    donothing donothing donothing donothing
+    cprule_elem cpstmt donothing donothing donothing donothing
 
 (* ---------------------------------------------------------------- *)
 
@@ -366,6 +375,12 @@ let collect_saved =
     bind (k ft)
       (match Ast.unwrap ft with
 	Ast.MetaFormat(name,_,Ast.Saved,_) -> [metaid name]
+      | _ -> option_default) in
+
+  let astfvattribute recursor k a =
+    bind (k a)
+      (match Ast.unwrap a with
+	Ast.MetaAttribute(name,_,Ast.Saved,_) -> [metaid name]
       | _ -> option_default) in
 
   let astfvassign recursor k aop =
@@ -474,10 +489,11 @@ let collect_saved =
   V.combiner bind option_default
     mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
     mcode mcode
-    donothing donothing donothing donothing donothing donothing
+    donothing donothing donothing donothing donothing donothing donothing
     astfvident astfvexpr astfvfrag astfvfmt astfvassign astfvbinary donothing
     astfvtypeC astfvinit astfvparam astfvdefine_param astfvdecls donothing
-    astfvfields donothing astfvrule_elem donothing donothing donothing donothing
+    astfvfields donothing donothing astfvrule_elem donothing donothing
+    astfvattribute donothing donothing
 
 (* ---------------------------------------------------------------- *)
 
@@ -522,7 +538,7 @@ let collect_fresh_seed_env metavars l =
 	  try
 	    (let v = List.assoc x fresh in
 	    match v with
-	      Ast.ListSeed l ->
+	    | Ast.ListSeed l ->
 		let ids =
 		  List.fold_left
 		    (function prev ->
@@ -530,6 +546,12 @@ let collect_fresh_seed_env metavars l =
 			  Ast.SeedId(id) -> id::prev
 			| _ -> prev)
 		    [] l in
+		((x,ids)::seed_env,Common.union_set ids seeds)
+            | Ast.ScriptSeed (_, _, params, _, _) ->
+                let ids =
+                  List.fold_left
+                    (fun prev (meta_name, _) -> meta_name::prev)
+                    [] params in
 		((x,ids)::seed_env,Common.union_set ids seeds)
 	    | _ -> ((x,[])::seed_env,seeds))
 	  with Not_found -> prev)
@@ -541,7 +563,11 @@ let collect_fresh_seed metavars l =
 
 let collect_in_plus_term =
 
-  let bind x y = List.rev_append x y in
+  (* use union because explosion may arise from isos, which duplicate vars *)
+  let bind x y =
+    List.fold_left
+      (fun prev cur -> if List.mem cur prev then prev else cur::prev)
+      y x in
   let option_default = [] in
   let donothing r k e = k e in
 
@@ -596,11 +622,11 @@ let collect_in_plus_term =
 
   V.combiner bind option_default
     mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
-    mcode mcode donothing donothing
+    mcode mcode donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
-    donothing donothing donothing donothing donothing astfvrule_elem
-    astfvstatement donothing donothing donothing
+    donothing donothing donothing donothing donothing donothing astfvrule_elem
+    astfvstatement donothing donothing donothing donothing
 
 let collect_in_plus metavars minirules =
   nub
@@ -767,6 +793,14 @@ let classify_variables metavar_decls minirules used_after =
 	Ast.rewrap ft (Ast.MetaFormat(name,constraints,unitary,inherited))
     | _ -> ft in
 
+  let attribute r k a =
+    let a = k a in
+    match Ast.unwrap a with
+      Ast.MetaAttribute(name,constraints,_,_) ->
+	let (unitary,inherited) = classify name in
+	Ast.rewrap a (Ast.MetaAttribute(name,constraints,unitary,inherited))
+    | _ -> a in
+
   let assignop r k ft =
     let ft = k ft in
     match Ast.unwrap ft with
@@ -889,11 +923,11 @@ let classify_variables metavar_decls minirules used_after =
   let fn = V.rebuilder
       mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
       mcode mcode
-      donothing donothing donothing donothing donothing donothing
+      donothing donothing donothing donothing donothing donothing donothing
       ident expression string_fragment string_format assignop binaryop
       donothing typeC
-      init param define_param decl donothing field donothing rule_elem
-      donothing donothing donothing donothing in
+      init param define_param decl donothing field donothing donothing
+      rule_elem donothing donothing attribute donothing donothing in
 
   List.map fn.V.rebuilder_top_level minirules
 
@@ -1078,8 +1112,9 @@ let astfvs metavars bound =
     donothing donothing astfvstatement_dots donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
+    donothing donothing donothing
+    astfvrule_elem astfvstatement astfvcase_line donothing astfvtoplevel
     donothing
-    astfvrule_elem astfvstatement astfvcase_line astfvtoplevel donothing
 
 (*
 let collect_astfvs rules =
@@ -1163,7 +1198,8 @@ let get_neg_pos_list (_,rule) used_after_list =
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
-    donothing donothing donothing donothing donothing in
+    donothing donothing donothing donothing donothing donothing donothing
+    donothing in
   match rule with
     Ast.CocciRule(rule_name,_,minirules,_,_) ->
       List.map

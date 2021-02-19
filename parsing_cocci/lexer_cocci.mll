@@ -292,7 +292,19 @@ let id_tokens lexbuf =
   | "decimal" when !Flag.ibm -> Tdecimal linetype
   | "EXEC" when !Flag.ibm -> Texec linetype
 
-  | "auto"  ->      Tauto     linetype
+  | "auto"  ->
+      let open Flag in
+      begin match !c_plus_plus with
+        On None ->
+          raise (
+            Semantic_cocci.Semantic (
+              "auto has different meaning in different versions of
+              C++. Please specify a version using --c++=<version>"))
+      | On (Some i) ->
+          if i >= 2011
+          then TautoType linetype
+          else Tauto linetype
+      | Off -> Tauto linetype end
   | "register" ->   Tregister linetype
   | "extern" ->     Textern   linetype
   | "static" ->     Tstatic   linetype
@@ -335,7 +347,11 @@ let mkassign op lexbuf =
   TOpAssign (op, (get_current_line_type lexbuf))
 
 let spinit _ = (* per semantic patch *)
-  Hashtbl.clear Data.non_local_script_constraints
+  Hashtbl.clear Data.non_local_script_constraints;
+  D.type_names := [];
+  D.attr_names := [];
+  D.iterator_names := [];
+  D.declarer_names := []
 
 let init _ = (* per file, first .cocci then iso *)
   line := 1;
@@ -355,6 +371,7 @@ let init _ = (* per file, first .cocci then iso *)
   Hashtbl.clear Data.all_metadecls;
   Hashtbl.clear metavariables;
   Hashtbl.clear type_names;
+  Hashtbl.clear attr_names;
   Hashtbl.clear rule_names;
   Hashtbl.clear iterator_names;
   Hashtbl.clear declarer_names;
@@ -511,6 +528,8 @@ let init _ = (* per file, first .cocci then iso *)
   Data.add_type_name :=
     (function name ->
       let fn clt = TTypeId(name,clt) in
+      (if not (List.mem name !D.type_names)
+      then D.type_names := name :: !D.type_names);
       Hashtbl.replace type_names name fn);
   Data.add_attribute :=
     (function name ->
@@ -519,14 +538,32 @@ let init _ = (* per file, first .cocci then iso *)
 	  ((Data.PLUS | Data.PLUSPLUS),_,_,_,_,_,_,_,_,_) ->
 	    TDirective (Ast.Space name, clt)
 	| _ -> Tattr (name, clt) in
+      (if not (List.mem name !D.attr_names)
+      then D.attr_names := name :: !D.attr_names);
       Hashtbl.replace attr_names name fn);
+  Data.add_attribute_meta :=
+    (fun name cstr pure ->
+      let fn ((d,ln,_,_,_,_,_,_,_,_) as clt) =
+        if (match d with (Data.PLUS | Data.PLUSPLUS) -> true | _ -> false)
+        then
+          (* TODO support meta attributes in plus code *)
+	  failwith
+	    (Printf.sprintf
+             "%d: meta attributes currently only allowed in context/minus code"
+             ln);
+        TMetaAttribute(name,cstr,pure,clt) in
+      Hashtbl.replace metavariables (get_name name) fn);
   Data.add_declarer_name :=
     (function name ->
       let fn clt = TDeclarerId(name,clt) in
+      (if not (List.mem name !D.declarer_names)
+      then D.declarer_names := name :: !D.declarer_names);
       Hashtbl.replace declarer_names name fn);
   Data.add_iterator_name :=
     (function name ->
       let fn clt = TIteratorId(name,clt) in
+      (if not (List.mem name !D.iterator_names)
+      then D.iterator_names := name :: !D.iterator_names);
       Hashtbl.replace iterator_names name fn);
   Data.add_symbol_meta :=
     (function name ->
@@ -543,6 +580,7 @@ let post_init _ =
   Stdcompat.Hashtbl.reset Data.all_metadecls;
   Stdcompat.Hashtbl.reset metavariables;
   Stdcompat.Hashtbl.reset type_names;
+  Stdcompat.Hashtbl.reset attr_names;
   Stdcompat.Hashtbl.reset rule_names;
   Stdcompat.Hashtbl.reset iterator_names;
   Stdcompat.Hashtbl.reset declarer_names;
@@ -630,6 +668,10 @@ rule token = parse
 
   | [' ' '\t'  ]* (("#!" [^ '\n']*) as after) {
      check_context_linetype after;
+     start_line false; token lexbuf }
+
+  | [' ' '\t'  ]* ("#" [' ' '\t']* "spatch" [' ' '\t']* ([' ' '\t'] [^ '\n']+)? as spatch) {
+     check_context_linetype spatch;
      start_line false; token lexbuf }
 
   | "__attribute__"
@@ -919,7 +961,7 @@ rule token = parse
 
       {
 	start_line true;
-	if not !Flag.c_plus_plus
+	if !Flag.c_plus_plus = Flag.Off
 	then
 	  Common.pr2_once
 	    "< and > not allowed in C identifiers, try -c++ option";
@@ -930,7 +972,7 @@ rule token = parse
 
       {
 	start_line true;
-	if not !Flag.c_plus_plus
+	if !Flag.c_plus_plus = Flag.Off
 	then
 	  Common.pr2_once
 	    "< and > not allowed in C identifiers, try -c++ option";
@@ -946,7 +988,7 @@ rule token = parse
 
       {
 	start_line true;
-	if not !Flag.c_plus_plus
+	if !Flag.c_plus_plus = Flag.Off
 	then
 	  Common.pr2_once
 	    "~ and :: not allowed in C identifiers, try -c++ option";
@@ -959,7 +1001,7 @@ rule token = parse
       ('<' (letter | '$' | '~') (letter | digit | '$' | '~') * '>') ?) *
       {
 	start_line true;
-	if not !Flag.c_plus_plus
+	if !Flag.c_plus_plus = Flag.Off
 	then
 	  Common.pr2_once
 	    "~ and :: not allowed in C identifiers, try -c++ option";
@@ -969,9 +1011,23 @@ rule token = parse
 
 
   | "'" { start_line true;
-	  TChar(char lexbuf,get_current_line_type lexbuf) }
+	  TChar(char lexbuf,Ast.IsChar,get_current_line_type lexbuf) }
   | '\"' { start_line true;
-	  TString(string lexbuf,(get_current_line_type lexbuf)) }
+	  TString(string lexbuf,Ast.IsChar,(get_current_line_type lexbuf)) }
+  | 'L' "'" { start_line true;
+	  TChar(char lexbuf,Ast.IsWchar,get_current_line_type lexbuf) }
+  | 'L' '\"' { start_line true;
+	  TString(string lexbuf,Ast.IsWchar,(get_current_line_type lexbuf)) }
+  | 'U' "'" { start_line true;
+	  TChar(char lexbuf,Ast.IsUchar,get_current_line_type lexbuf) }
+  | 'U' '\"' { start_line true;
+	  TString(string lexbuf,Ast.IsUchar,(get_current_line_type lexbuf)) }
+  | 'u' "'" { start_line true;
+	  TChar(char lexbuf,Ast.Isuchar,get_current_line_type lexbuf) }
+  | 'u' '\"' { start_line true;
+	  TString(string lexbuf,Ast.Isuchar,(get_current_line_type lexbuf)) }
+  | "u8" '\"' { start_line true;
+	  TString(string lexbuf,Ast.Isu8char,(get_current_line_type lexbuf)) }
   | (real as x)    { start_line true;
 		     TFloat(x,(get_current_line_type lexbuf)) }
   | ((( decimal | hexa | octal)
@@ -1097,7 +1153,7 @@ and metavariable_decl_token = parse
       ('<' (letter | '$' | '~') (letter | digit | '$' | '~') * '>') ?) +
 
       { start_line true;
-	if not !Flag.c_plus_plus
+	if !Flag.c_plus_plus = Flag.Off
 	then
 	  Common.pr2_once
 	    "< and > not allowed in C identifiers, try -c++ option";
@@ -1107,7 +1163,7 @@ and metavariable_decl_token = parse
       ('<' (letter | '$' | '~') (letter | digit | '$' | '~') * '>')
 
       { start_line true;
-	if not !Flag.c_plus_plus
+	if !Flag.c_plus_plus = Flag.Off
 	then
 	  Common.pr2_once
 	    "< and > not allowed in C identifiers, try -c++ option";
@@ -1122,7 +1178,7 @@ and metavariable_decl_token = parse
       ('<' (letter | '$' | '~') (letter | digit | '$' | '~') * '>') ?) *
 
       { start_line true;
-	if not !Flag.c_plus_plus
+	if !Flag.c_plus_plus = Flag.Off
 	then
 	  Common.pr2_once
 	    "~ and :: not allowed in C identifiers, try -c++ option";
@@ -1134,7 +1190,7 @@ and metavariable_decl_token = parse
     ("::" ((letter | '$') (letter | digit | '$') * )
       ('<' (letter | '$' | '~') (letter | digit | '$' | '~') * '>') ?) *
       { start_line true;
-	if not !Flag.c_plus_plus
+	if !Flag.c_plus_plus = Flag.Off
 	then
 	  Common.pr2_once
 	    "~ and :: not allowed in C identifiers, try -c++ option";
@@ -1144,9 +1200,23 @@ and metavariable_decl_token = parse
 
 
   | "'" { start_line true;
-	  TChar(char lexbuf,get_current_line_type lexbuf) }
+	  TChar(char lexbuf,Ast.IsChar,get_current_line_type lexbuf) }
   | '\"' { start_line true;
-	  TString(string lexbuf,(get_current_line_type lexbuf)) }
+	  TString(string lexbuf,Ast.IsChar,(get_current_line_type lexbuf)) }
+  | 'L' "'" { start_line true;
+	  TChar(char lexbuf,Ast.IsWchar,get_current_line_type lexbuf) }
+  | 'L' '\"' { start_line true;
+	  TString(string lexbuf,Ast.IsWchar,(get_current_line_type lexbuf)) }
+  | 'U' "'" { start_line true;
+	  TChar(char lexbuf,Ast.IsUchar,get_current_line_type lexbuf) }
+  | 'U' '\"' { start_line true;
+	  TString(string lexbuf,Ast.IsUchar,(get_current_line_type lexbuf)) }
+  | 'u' "'" { start_line true;
+	  TChar(char lexbuf,Ast.Isuchar,get_current_line_type lexbuf) }
+  | 'u' '\"' { start_line true;
+	  TString(string lexbuf,Ast.Isuchar,(get_current_line_type lexbuf)) }
+  | "u8" '\"' { start_line true;
+	  TString(string lexbuf,Ast.Isu8char,(get_current_line_type lexbuf)) }
   | (real as x)    { TFloat(x,(get_current_line_type lexbuf)) }
   | ((( decimal | hexa | octal)
       ( ['u' 'U']

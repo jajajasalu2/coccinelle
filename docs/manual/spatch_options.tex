@@ -450,7 +450,7 @@ other \#ifdef.}
 
 \normal{-I $\langle$path$\rangle$}{ This option specifies a directory
   in which to find non-local include files.  This option can be used
-  several times to specify multipls include paths.}
+  several times to specify multiple include paths.}
 
 \normal{-{}-include-headers-for-types}{Header files are parsed to collect
   type information, but are not involved in the subsequent matching and
@@ -584,11 +584,6 @@ version of {\bf -{}-partial-match}.}
        disjunctions, this can result in a very big CTL formula.  So this
        option give the user the option to say he doesn't want this feature,
        if that is the case.}
-
-\rare{-{}-pyoutput coccilib.output.Gtk, -{}-pyoutput coccilib.output.Console}{
-This controls whether Python output is sent to Gtk or to the console.  {\bf
-  -{}-pyoutput coccilib.output.Console} is the default.  The Gtk option is
-currently not well supported.}
 
 \developer{-{}-loop}{When there is ``{\tt{\ldots}}'' in the semantic patch,
   the CTL operator {\sf AU} is used if the current function does not

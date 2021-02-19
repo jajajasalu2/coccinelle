@@ -46,11 +46,11 @@ SOURCES_parsing_cocci := \
 	lexer_cli.mll lexer_script.mll \
 	cocci_grep.ml dpll.ml get_constants2.ml id_utils.ml git_grep.ml \
 	adjacency.ml commas_on_lists.ml re_constraints.ml parse_cocci.ml \
-	command_line.ml
+	command_line.ml cocci_args.ml
 SOURCES_parsing_c := \
 	token_annot.ml flag_parsing_c.ml parsing_stat.ml \
 	token_c.ml ast_c.ml includes.ml control_flow_c.ml \
-	visitor_c.ml lib_parsing_c.ml control_flow_c_build.ml \
+	visitor_c.ml lib_parsing_c.ml includes_cache.ml control_flow_c_build.ml \
 	pretty_print_c.ml semantic_c.ml lexer_parser.ml parser_c.mly \
 	lexer_c.mll parse_string_c.ml token_helpers.ml token_views_c.ml \
 	cpp_token_c.ml parsing_hacks.ml cpp_analysis_c.ml \
@@ -212,7 +212,7 @@ STDCOMPAT_USERS := parsing_c/type_annoter_c cocci parsing_cocci/check_meta \
 	parsing_cocci/id_utils parsing_cocci/insert_plus \
 	parsing_cocci/lexer_cocci ocaml/yes_prepare_ocamlcocci \
 	tools/spgen/source/user_input tools/spgen/source/spgen_interactive \
-	parsing_c/flag_parsing_c
+	parsing_c/flag_parsing_c commons/common parsing_cocci/cocci_args
 
 SHOW_CLEAN := @echo "CLEAN    "
 SHOW_OCAMLC := @echo "OCAMLC   "
@@ -309,7 +309,9 @@ install-spatch : spatch$(TOOLS_SUFFIX)
 	$(INSTALL_DATA) standard.h $(DESTDIR)$(LIBDIR)
 	$(INSTALL_DATA) standard.iso $(DESTDIR)$(LIBDIR)
 	$(INSTALL_DATA) ocaml/*.cmi $(DESTDIR)$(LIBDIR)/ocaml/
-	$(INSTALL_DATA) ocaml/*.cmx $(DESTDIR)$(LIBDIR)/ocaml/
+	if test -f ocaml/coccilib.cmx; then \
+		$(INSTALL_DATA) ocaml/*.cmx $(DESTDIR)$(LIBDIR)/ocaml/; \
+	fi
 
 .PHONY : install-man
 install-man :
@@ -327,15 +329,9 @@ install-spgen : tools/spgen/source/spgen$(TOOLS_SUFFIX)
 
 .PHONY : install-python
 install-python:
-	$(MKDIR_P) $(DESTDIR)$(LIBDIR)/python/coccilib/coccigui
+	$(MKDIR_P) $(DESTDIR)$(LIBDIR)/python/coccilib
 	$(INSTALL_DATA) python/coccilib/*.py \
 		$(DESTDIR)$(LIBDIR)/python/coccilib
-	$(INSTALL_DATA) python/coccilib/coccigui/*.py \
-		$(DESTDIR)$(LIBDIR)/python/coccilib/coccigui
-	$(INSTALL_DATA) python/coccilib/coccigui/pygui.glade \
-		$(DESTDIR)$(LIBDIR)/python/coccilib/coccigui
-	$(INSTALL_DATA) python/coccilib/coccigui/pygui.gladep \
-		$(DESTDIR)$(LIBDIR)/python/coccilib/coccigui
 
 .PHONY : uninstall
 uninstall : uninstall-bash
@@ -379,21 +375,22 @@ endef
 %.ml : %.mll
 	$(RUN_OCAMLLEX) $<
 
-ml_files := $(ml_files_but_parsers) parsing_c/parser_c.ml parsing_cocci/parser_cocci_menhir.ml
-ml_and_mli_files := $(ml_files) $(ml_files:.ml=.mli)
+ml_files_but_menhir := $(ml_files_but_parsers) parsing_c/parser_c.ml
+ml_files := $(ml_files_but_menhir) parsing_cocci/parser_cocci_menhir.ml
+ml_and_mli_files_but_menhir := $(ml_files_but_menhir) $(ml_files_but_menhir:.ml=.mli)
 
 ifneq ($(MAKECMDGOALS),clean)
 ifneq ($(MAKECMDGOALS),distclean)
 ifeq ($(DEPEND_METHOD),onefile)
-.depend : $(ml_and_mli_files) parsing_cocci/parser_cocci_menhir.mly $(MENHIR)
+.depend : $(ml_and_mli_files_but_menhir) parsing_cocci/parser_cocci_menhir.mly $(MENHIR)
 	@echo OCAMLDEP .depend
-	@$(OCAMLDEP_CMD) $(ml_and_mli_files) >$@ || (rm $@; false)
+	@$(OCAMLDEP_CMD) $(ml_and_mli_files_but_menhir) >$@ || (rm $@; false)
 	@$(MENHIR_DEP_CMD) parsing_cocci/parser_cocci_menhir.mly >>$@ \
 		|| (rm $@; false)
 
 -include .depend
 else ifeq ($(DEPEND_METHOD),multifile)
--include $(addsuffix .d,$(ml_and_mli_files))
+-include $(addsuffix .d,$(ml_and_mli_files_but_menhir))
 -include parsing_cocci/parser_cocci_menhir.mly.d
 else
 $(error DEPEND_METHOD is expected to be 'onefile' or 'multifile',\

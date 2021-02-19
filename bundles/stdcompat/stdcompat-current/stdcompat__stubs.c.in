@@ -1,5 +1,5 @@
-#include <caml/alloc.h>
 #include <string.h>
+#include "stdcompat.h"
 
 @C_BEGIN_BEFORE_4_06_0@
 value

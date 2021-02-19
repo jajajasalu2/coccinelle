@@ -11,6 +11,7 @@ INTERFACES=pywrappers py pycaml
 C_OBJS=pyml
 ARCHIVE=pyml
 LIBRARY=pyml
+SIDEPRODUCTS=
 SRC_DIR := $(PACKAGE_DIR)
 OTHERS := $(SRC_DIR)/pyml_arch.ml
 OCAMLFLAGS+=-I $(STDCOMPATDIR)
@@ -21,17 +22,16 @@ CLEANOTHERS=pyml-current/generate pyml-current/generate.cmi \
 	pyml-current/pyml.cma pyml-current/pyml.cmxa \
 	pyml-current/dllpyml_stubs.so
 GENERATED_SOURCE_FILES := $(SRC_DIR)/pywrappers.ml $(SRC_DIR)/pywrappers.mli
+OCAMLCCFLAGS+=-ccopt -I$(STDCOMPATDIR)
 
-ARCH:=$(shell uname)
+UNAME_ARCH := $(shell uname)
 
-ifeq ($(ARCH),Linux)
-	PYML_ARCH=pyml_arch_linux.ml
-else ifeq ($(ARCH),Darwin)
-	PYML_ARCH=pyml_arch_darwin.ml
-else ifeq ($(findstring CYGWIN,$(ARCH)),CYGWIN)
-	PYML_ARCH=pyml_arch_cygwin.ml
+ifeq ($(UNAME_ARCH),Darwin)
+	PYML_ARCH := pyml_arch_darwin.ml
+else ifeq ($(findstring CYGWIN,$(UNAME_ARCH)),CYGWIN)
+	PYML_ARCH := pyml_arch_cygwin.ml
 else
-	$(error Unsupported OS $(ARCH)
+	PYML_ARCH := pyml_arch_unix.ml
 endif
 
 include ../Makefile.bundles

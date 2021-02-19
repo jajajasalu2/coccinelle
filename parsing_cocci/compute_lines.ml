@@ -351,12 +351,12 @@ let rec expression e =
       let const = normal_mcode const in
       let ln = promote_mcode const in
       mkres e (Ast0.Constant(const)) ln ln
-  | Ast0.StringConstant(lq,str,rq) ->
+  | Ast0.StringConstant(lq,str,rq,isWchar) ->
       let lq = normal_mcode lq in
       let str =
 	dots is_str_dots (Some(promote_mcode lq)) string_fragment str in
       let rq = normal_mcode rq in
-      mkres e (Ast0.StringConstant(lq,str,rq))
+      mkres e (Ast0.StringConstant(lq,str,rq,isWchar))
 	(promote_mcode lq) (promote_mcode rq)
   | Ast0.FunCall(fn,lp,args,rp) ->
       let fn = expression fn in
@@ -425,11 +425,12 @@ let rec expression e =
       let ar = normal_mcode ar in
       let field = ident field in
       mkres e (Ast0.RecordPtAccess(exp,ar,field)) exp field
-  | Ast0.Cast(lp,ty,rp,exp) ->
+  | Ast0.Cast(lp,ty,attr,rp,exp) ->
       let lp = normal_mcode lp in
       let exp = expression exp in
+      let attr = List.map attribute attr in
       let rp = normal_mcode rp in
-      mkres e (Ast0.Cast(lp,typeC ty,rp,exp)) (promote_mcode lp) exp
+      mkres e (Ast0.Cast(lp,typeC ty,attr,rp,exp)) (promote_mcode lp) exp
   | Ast0.SizeOfExpr(szf,exp) ->
       let szf = normal_mcode szf in
       let exp = expression exp in
@@ -564,16 +565,17 @@ and typeC t =
       let ty = typeC ty in
       let star = normal_mcode star in
       mkres t (Ast0.Pointer(ty,star)) ty (promote_mcode star)
-  | Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
+  | Ast0.ParenType(lp,ty,rp) ->
+      let lp = normal_mcode lp in
+      let rp = normal_mcode rp in
       let ty = typeC ty in
-      let lp1 = normal_mcode lp1 in
-      let star = normal_mcode star in
-      let rp1 = normal_mcode rp1 in
-      let lp2 = normal_mcode lp2 in
-      let params = parameter_list (Some(promote_mcode lp2)) params in
-      let rp2 = normal_mcode rp2 in
-      mkres t (Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2))
-	ty (promote_mcode rp2)
+      mkres t (Ast0.ParenType(lp,ty,rp)) ty (promote_mcode rp)
+  | Ast0.FunctionType(ty,lp,params,rp) ->
+      let ty = typeC ty in
+      let lp = normal_mcode lp in
+      let params = parameter_list (Some(promote_mcode lp)) params in
+      let rp = normal_mcode rp in
+      mkres t (Ast0.FunctionType(ty,lp,params,rp)) ty (promote_mcode rp)
   | Ast0.Array(ty,lb,size,rb) ->
       let ty = typeC ty in
       let lb = normal_mcode lb in
@@ -600,7 +602,8 @@ and typeC t =
   | Ast0.EnumDef(ty,lb,ids,rb) ->
       let ty = typeC ty in
       let lb = normal_mcode lb in
-      let ids = dots is_exp_dots (Some(promote_mcode lb)) expression ids in
+      let ids =
+        dots is_enum_decl_dots (Some(promote_mcode lb)) enum_decl ids in
       let rb = normal_mcode rb in
       mkres t (Ast0.EnumDef(ty,lb,ids,rb)) ty (promote_mcode rb)
   | Ast0.StructUnionName(kind,Some name) ->
@@ -635,6 +638,10 @@ and typeC t =
       let name = normal_mcode name in
       let ln = promote_mcode name in
       mkres t (Ast0.TypeName(name)) ln ln
+  | Ast0.AutoType(auto) ->
+      let auto = normal_mcode auto in
+      let la = promote_mcode auto in
+      mkres t (Ast0.AutoType(auto)) la la
   | Ast0.MetaType(name,cstr,a) ->
       let name = normal_mcode name in
       let ln = promote_mcode name in
@@ -665,7 +672,7 @@ and declaration d =
   | Ast0.Init(stg,ty,id,attr,eq,exp,sem) ->
       let ty = typeC ty in
       let id = ident id in
-      let attr = List.map normal_mcode attr in
+      let attr = List.map attribute attr in
       let eq = normal_mcode eq in
       let exp = initialiser exp in
       let sem = normal_mcode sem in
@@ -679,7 +686,7 @@ and declaration d =
   | Ast0.UnInit(stg,ty,id,attr,sem) ->
       let ty = typeC ty in
       let id = ident id in
-      let attr = List.map normal_mcode attr in
+      let attr = List.map attribute attr in
       let sem = normal_mcode sem in
       (match stg with
 	None ->
@@ -708,20 +715,21 @@ and declaration d =
 	| Ast0.FStorage(stg)::_ -> mkres d res (promote_mcode stg) right
 	| Ast0.FType(ty)::_ -> mkres d res ty right
 	| Ast0.FInline(inline)::_ -> mkres d res (promote_mcode inline) right
-	| Ast0.FAttr(attr)::_ -> mkres d res (promote_mcode attr) right)
-  | Ast0.MacroDecl(stg,name,lp,args,rp,sem) ->
+	| Ast0.FAttr(attr)::_ -> mkres d res attr right)
+  | Ast0.MacroDecl(stg,name,lp,args,rp,attr,sem) ->
       let name = ident name in
       let lp = normal_mcode lp in
       let args = dots is_exp_dots (Some(promote_mcode lp)) expression args in
       let rp = normal_mcode rp in
+      let attr = List.map attribute attr in
       let sem = normal_mcode sem in
       (match stg with
 	None ->
-	  mkres d (Ast0.MacroDecl(None,name,lp,args,rp,sem))
+	  mkres d (Ast0.MacroDecl(None,name,lp,args,rp,attr,sem))
 	    name (promote_mcode sem)
       | Some x ->
 	  let stg = Some (normal_mcode x) in
-	  mkres d (Ast0.MacroDecl(stg,name,lp,args,rp,sem))
+	  mkres d (Ast0.MacroDecl(stg,name,lp,args,rp,attr,sem))
 	    (promote_mcode x) (promote_mcode sem))
   | Ast0.MacroDeclInit(stg,name,lp,args,rp,eq,ini,sem) ->
       let name = ident name in
@@ -739,10 +747,11 @@ and declaration d =
 	  let stg = Some (normal_mcode x) in
 	  mkres d (Ast0.MacroDeclInit(stg,name,lp,args,rp,eq,ini,sem))
 	    (promote_mcode x) (promote_mcode sem))
-  | Ast0.TyDecl(ty,sem) ->
+  | Ast0.TyDecl(ty,attr,sem) ->
       let ty = typeC ty in
+      let attr = List.map attribute attr in
       let sem = normal_mcode sem in
-      mkres d (Ast0.TyDecl(ty,sem)) ty (promote_mcode sem)
+      mkres d (Ast0.TyDecl(ty,attr,sem)) ty (promote_mcode sem)
   | Ast0.Typedef(stg,ty,id,sem) ->
       let stg = normal_mcode stg in
       let ty = typeC ty in
@@ -803,6 +812,28 @@ and field d =
       let dots = bad_mcode dots in
       let ln = promote_mcode dots in
       mkres d (Ast0.Fdots(dots,whencode)) ln ln
+
+and is_enum_decl_dots d =
+  match Ast0.unwrap d with
+    Ast0.EnumDots(_) -> true
+  | _ -> false
+
+and enum_decl d =
+  match Ast0.unwrap d with
+     Ast0.Enum(name,enum_val) ->
+      let name = ident name in
+      let eval (a, b) = (normal_mcode a, expression b) in
+      let enum_val = get_option eval enum_val in
+      mkres d (Ast0.Enum(name,enum_val)) name name
+  | Ast0.EnumComma(cm) ->
+      let cm = normal_mcode cm in
+      let ln = promote_mcode cm in
+      mkres d (Ast0.EnumComma(cm)) ln ln
+  | Ast0.EnumDots(dots,whencode) ->
+      let dots = bad_mcode dots in
+      let ln = promote_mcode dots in
+      mkres d (Ast0.EnumDots(dots,whencode)) ln ln
+
 
 (* --------------------------------------------------------------------- *)
 (* Initializer *)
@@ -876,6 +907,17 @@ and initialiser_list prev = dots is_init_dots prev initialiser
 (* for export *)
 and initialiser_dots x = dots is_init_dots None initialiser x
 
+and attribute attr =
+  match Ast0.unwrap attr with
+    Ast0.Attribute(a) ->
+      let ln = promote_mcode a in
+      mkres attr (Ast0.Attribute(a)) ln ln
+  | Ast0.MetaAttribute(name,a,b) ->
+      let name = normal_mcode name in
+      let ln = promote_mcode name in
+      mkres attr (Ast0.MetaAttribute(name,a,b)) ln ln
+
+
 (* --------------------------------------------------------------------- *)
 (* Parameter *)
 
@@ -886,13 +928,31 @@ and is_param_dots p =
 
 and parameterTypeDef p =
   match Ast0.unwrap p with
-    Ast0.VoidParam(ty) ->
-      let ty = typeC ty in mkres p (Ast0.VoidParam(ty)) ty ty
-  | Ast0.Param(ty,Some id) ->
+    Ast0.VoidParam(ty,attr) ->
+      let attr = List.map attribute attr in
+      let ty = typeC ty in
+      (match attr with
+        [] -> mkres p (Ast0.VoidParam(ty,attr)) ty ty
+      | l ->
+          let lattr = List.hd (List.rev l) in
+          mkres p (Ast0.VoidParam(ty,attr)) ty lattr)
+  | Ast0.Param(ty,Some id,attr) ->
       let id = ident id in
-      let ty = typeC ty in mkres p (Ast0.Param(ty,Some id)) ty id
-  | Ast0.Param(ty,None) ->
-      let ty = typeC ty in mkres p (Ast0.Param(ty,None)) ty ty
+      let ty = typeC ty in
+      let attr = List.map attribute attr in
+      (match attr with
+        [] -> mkres p (Ast0.Param(ty,Some id,attr)) ty id
+      | l ->
+          let lattr = List.hd (List.rev l) in
+          mkres p (Ast0.Param(ty,Some id,attr)) ty lattr)
+  | Ast0.Param(ty,None,attr) ->
+      let attr = List.map attribute attr in
+      let ty = typeC ty in
+      (match attr with
+        [] -> mkres p (Ast0.Param(ty,None,attr)) ty ty
+      | l ->
+          let lattr = List.hd (List.rev l) in
+          mkres p (Ast0.Param(ty,None,attr)) ty lattr)
   | Ast0.MetaParam(name,a,b) ->
       let name = normal_mcode name in
       let ln = promote_mcode name in
@@ -1248,7 +1308,7 @@ let rec statement s =
 	| Ast0.FStorage(stg)::_ -> mkres s res (promote_mcode stg) right
 	| Ast0.FType(ty)::_ -> mkres s res ty right
 	| Ast0.FInline(inline)::_ -> mkres s res (promote_mcode inline) right
-	| Ast0.FAttr(attr)::_ -> mkres s res (promote_mcode attr) right)
+	| Ast0.FAttr(attr)::_ -> mkres s res attr right)
 
     | Ast0.Include(inc,stm) ->
 	let inc = normal_mcode inc in
@@ -1310,11 +1370,10 @@ and leftfninfo fninfo name bef = (* cases on what is leftmost *)
        Ast0.FInline(set_mcode_info inline (Ast0.get_info inlinfo))::rest,
        name)
   | Ast0.FAttr(attr)::rest ->
-      let (leftinfo,attrinfo) =
-	promote_to_statement_start (promote_mcode attr) bef in
-      (leftinfo,
-       Ast0.FAttr(set_mcode_info attr (Ast0.get_info attrinfo))::rest,
-       name)
+      let attr = attribute attr in
+      let (leftinfo,attr) =
+	promote_to_statement_start attr bef in
+      (leftinfo,Ast0.FAttr(attr)::rest,name)
 
 and pragmainfo pi =
   match Ast0.unwrap pi with

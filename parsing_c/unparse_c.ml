@@ -589,6 +589,7 @@ let generated_newline = function
   | _ -> false
 
 let is_fake2 = function Fake2 _ -> true | _ -> false
+let is_comma = function Comma _ -> true | _ -> false
 
 let is_whitespace x =
   is_space x || is_newline_or_comment x
@@ -676,22 +677,14 @@ let is_minus = function
   | T2 (_, Min _, _, _) -> true
   | _ -> false
 
-let drop_minus xs =
-  xs +> exclude is_minus
-
-let drop_expanded xs =
-  xs +> exclude (function
-    | T2 (t,_,_,_) when TH.is_expanded t -> true
-    | _ -> false
-  )
-
-let drop_fake xs =
-  xs +> exclude is_fake2
+let is_expanded = function
+    T2 (t,_,_,_) when TH.is_expanded t -> true
+  | _ -> false
 
 let remove_minus_and_between_and_expanded_and_fake1 xs =
 
   (* get rid of expanded tok *)
-  let xs = drop_expanded xs in
+  let xs = xs +> exclude is_expanded in
 
   let minus_or_comment_or_fake x =
     is_minus x || is_minusable_comment x || is_fake2 x in
@@ -747,6 +740,7 @@ let remove_minus_and_between_and_expanded_and_fake1 xs =
       (T2(Parser_c.TCommentNewline c,_b,_i,_h) as x)::
       ((T2(_,Min adj1,_,_)) as t1)::xs ->
       let (minus_list,rest) = span_not_context (t1::xs) in
+      let (minus_list,rest) = drop_trailing_plus minus_list rest in
       let (pre_minus_list,_) = span not_context_newline minus_list in
       let contains_plus = exists_before_end is_plus pre_minus_list in
       let x =
@@ -759,6 +753,7 @@ let remove_minus_and_between_and_expanded_and_fake1 xs =
          @ adjust_around_minus rest
     | ((Fake2(_,Min adj1) | T2(_,Min adj1,_,_)) as t1)::xs ->
       let (minus_list,rest) = span_not_context (t1::xs) in
+      let (minus_list,rest) = drop_trailing_plus minus_list rest in
       let (pre_minus_list,_) = span not_context_newline minus_list in
       let contains_plus = exists_before_end is_plus pre_minus_list in
       adjust_within_minus contains_plus minus_list
@@ -864,7 +859,7 @@ let remove_minus_and_between_and_expanded_and_fake1 xs =
   let xs = adjust_around_minus xs in
 
   (* get rid of fake tok *)
-  let xs = drop_fake xs in
+  let xs = xs +> exclude is_fake2 in
 
   (* this drops blank lines after a brace introduced by removing code *)
   let minus_or_comment_nonl = function
@@ -1017,15 +1012,14 @@ let remove_minus_and_between_and_expanded_and_fake1 xs =
   cleanup_ifdefs xs
 
 let remove_minus_and_between_and_expanded_and_fake2 xs =
-  let xs = drop_minus xs in
-  xs
+  xs +> exclude is_minus
 
 (* things that should not be followed by space - boundary between SmPL
 code and C code *)
 let adjust_eat_space toks =
   let rec loop = function
     | [] -> []
-    | EatSpace2 :: x :: rest when is_space x -> loop rest
+    | EatSpace2 :: x :: rest when is_space x || is_added_space x -> loop rest
     | EatSpace2 :: rest -> loop rest
     | x :: xs -> x :: loop xs in
   loop toks
@@ -1222,10 +1216,16 @@ let check_danger toks =
 		    then danger @ de :: (search_danger rest)
 		    else
 		      (* some things removed, not others, unminus the type *)
+		      (* if next token is added, will need a newline *)
+		      let rest_with_nl =
+			match rest with
+			  t::_ when all_coccis t ->
+			    (Cocci2("\n",-1,-1,-1,None)) :: rest
+			|_ -> rest in
 		      drop_last_danger_comma
 			((unminus_initial_danger danger) @
 			 [(unminus_danger_end de)]) @
-		      (search_danger rest)
+		      (search_danger rest_with_nl)
 		| _ -> failwith "missing danger end")
 	    | _ -> failwith "missing danger end")
 	| _ -> x :: search_danger xs in
@@ -1300,21 +1300,28 @@ let rec drop_space_at_endline = function
     drop_space_at_endline rest
   | ((T2(Parser_c.TCommentSpace _,Ctx,_i,_h)) as a)::rest ->
     let (outer_spaces,rest) = span is_space rest in
-    let minus_or_comment_or_space_nocpp = function
-      | (T2(Parser_c.TCommentNewline _,_,_i,_)) -> false
-      | T2(_,Min adj,_,_) -> true
-      | (T2(Parser_c.TCommentSpace _,Ctx,_i,_)) -> true
+    let match_till_context_nl = function
+      | (T2(Parser_c.TCommentNewline _,_,_i,_) :: _) -> false
+      | (T2(_,Min adj,_,_) :: _) -> true
       | x -> false in
-    let (minus,rest) = span minus_or_comment_or_space_nocpp rest in
-    let fail _ = a :: outer_spaces @ minus @ (drop_space_at_endline rest) in
-    if List.exists is_minus minus
+    if match_till_context_nl rest
     then
-      match rest with
-      | ((T2(Parser_c.TCommentNewline _,Ctx,_i,_h)) as a)::rest ->
-        (* drop trailing spaces *)
-        minus @ a :: (drop_space_at_endline rest)
-      | _ -> fail ()
-    else fail ()
+      let minus_or_comment_or_space_nocpp = function
+        | (T2(Parser_c.TCommentNewline _,Ctx,_i,_)) -> false
+        | T2(_,Min adj,_,_) -> true
+        | (T2(Parser_c.TCommentSpace _,Ctx,_i,_)) -> true
+        | x -> false in
+      let (minus,rest) = span minus_or_comment_or_space_nocpp rest in
+      let fail _ = a :: outer_spaces @ minus @ (drop_space_at_endline rest) in
+      if List.exists is_minus minus
+      then
+        match rest with
+        | ((T2(Parser_c.TCommentNewline _,Ctx,_i,_h)) as a)::rest ->
+          (* drop trailing spaces *)
+          minus @ a :: (drop_space_at_endline rest)
+        | _ -> fail ()
+      else fail ()
+    else a :: outer_spaces @ (drop_space_at_endline rest)
   | a :: rest ->
     a :: drop_space_at_endline rest
 
@@ -2535,7 +2542,9 @@ let pp_program2 xs outfile  =
           if !Flag.sgrep_mode2
           then
             (* nothing else to do for sgrep *)
-            drop_expanded(drop_fake(drop_minus toks))
+	    toks +>
+	    exclude
+	      (fun x -> is_expanded x || is_comma x || is_fake2 x || is_minus x)
           else
             begin
               (* phase2: can now start to filter and adjust *)

@@ -132,6 +132,7 @@ let add_binaryOp_meta:
 
 let add_type_name: (string -> unit) ref = ref uninitialized_add_meta
 let add_attribute: (string -> unit) ref = ref uninitialized_add_meta
+let add_attribute_meta: cstr_meta_type ref = ref uninitialized_add_meta
 let add_declarer_name: (string -> unit) ref = ref uninitialized_add_meta
 let add_iterator_name: (string -> unit) ref = ref uninitialized_add_meta
 
@@ -157,3 +158,14 @@ let non_local_script_constraints =
   ((Hashtbl.create 101) :
      (((string (* rule name *) * Ast_cocci.meta_name),
       (Ast_cocci.meta_name * Ast_cocci.script_constraint) list ref) Hashtbl.t))
+
+let fresh_id_scripts:
+    (Ast_cocci.meta_name * Ast_cocci.seed_script) list ref = ref []
+
+(* ---------------------------------------------------------------------- *)
+(* Names of some special tokens.  Make these acessible to the C parser *)
+
+let type_names = ref ([]:string list)
+let attr_names = ref ([]:string list)
+let declarer_names = ref ([]:string list)
+let iterator_names = ref ([]:string list)

@@ -324,7 +324,10 @@ let rec vk_expr = fun bigf expr ->
 
     | SizeOfExpr  (e) -> exprf e
     | SizeOfType  (t) -> vk_type bigf t
-    | Cast    (t, e) -> vk_type bigf t; exprf e
+    | Cast    (t, a, e) ->
+        vk_type bigf t;
+        a +> List.iter (vk_attribute bigf);
+        exprf e
 
     (* old: | StatementExpr (((declxs, statxs), is)), is2 ->
      *          List.iter (vk_decl bigf) declxs;
@@ -516,6 +519,7 @@ and vk_type = fun bigf t ->
     | ParenType t -> typef t
     | TypeOfExpr e -> vk_expr bigf e
     | TypeOfType t -> typef t
+    | AutoType -> ()
 
   in typef t
 
@@ -547,8 +551,9 @@ and vk_decl = fun bigf d ->
         iif ii;
         vk_onedecl bigf x
       );
-    | MacroDecl ((_stob, s, args, ptvg),ii) ->
+    | MacroDecl ((_stob, s, args, attrs, ptvg),ii) ->
         iif ii;
+        attrs +> List.iter (vk_attribute bigf);
         vk_argument_list bigf args
     | MacroDeclInit ((_stob, s, args, ini),ii) ->
         iif ii;
@@ -1187,7 +1192,11 @@ let rec vk_expr_s = fun bigf expr ->
 
       | SizeOfExpr  (e) -> SizeOfExpr (exprf e)
       | SizeOfType  (t) -> SizeOfType (vk_type_s bigf t)
-      | Cast    (t, e)  -> Cast (vk_type_s bigf t, exprf e)
+      | Cast    (t, a, e)  ->
+          Cast
+            (vk_type_s bigf t,
+             a +> List.map (vk_attribute_s bigf),
+             exprf e)
 
       | StatementExpr (statxs, is) ->
           StatementExpr (
@@ -1433,6 +1442,7 @@ and vk_type_s = fun bigf t ->
       | ParenType t -> ParenType (typef t)
       | TypeOfExpr e -> TypeOfExpr (vk_expr_s bigf e)
       | TypeOfType t -> TypeOfType (typef t)
+      | AutoType -> AutoType
     in
     (q', iif_iiq),
     (t', iif iit)
@@ -1462,10 +1472,11 @@ and vk_decl_s = fun bigf d ->
     | DeclList (xs, ii) ->
         DeclList (List.map (fun (x,ii) -> (vk_onedecl_s bigf x, iif ii)) xs,
 		  iif ii)
-    | MacroDecl ((stob, s, args, ptvg),ii) ->
+    | MacroDecl ((stob, s, args, attrs, ptvg),ii) ->
         MacroDecl
           ((stob, s,
            args +> List.map (fun (e,ii) -> vk_argument_s bigf e, iif ii),
+           attrs +> List.map (vk_attribute_s bigf),
            ptvg),
           iif ii)
     | MacroDeclInit ((stob, s, args, ini),ii) ->
@@ -1662,7 +1673,7 @@ and vk_toplevel_s = fun bigf p ->
   in f (k, bigf) p
 
 and vk_program_s : visitor_c_s -> toplevel list -> toplevel list =
-      fun bigf -> List.map (vk_toplevel_s bigf)
+      fun bigf ast -> List.rev (List.rev_map (vk_toplevel_s bigf) ast)
 
 
 and vk_cpp_directive_s = fun bigf top ->
@@ -1789,7 +1800,7 @@ and vk_info_s = fun bigf info ->
   infof info
 
 and vk_ii_s = fun bigf ii ->
-  List.map (vk_info_s bigf) ii
+  List.rev (List.rev_map (vk_info_s bigf) ii)
 
 (* ------------------------------------------------------------------------ *)
 
@@ -1927,10 +1938,15 @@ and vk_node_s = fun bigf node ->
 (* ------------------------------------------------------------------------ *)
 and vk_param_s = fun bigf param ->
   let iif ii = vk_ii_s bigf ii in
-  let {p_namei = swrapopt; p_register = (b, iib); p_type=ft} = param in
+  let
+    {p_namei = swrapopt;
+     p_register = (b, iib);
+     p_type=ft;
+     p_attr = attrs} = param in
   { p_namei = swrapopt +> Common.map_option (vk_name_s bigf);
     p_register = (b, iif iib);
     p_type = vk_type_s bigf ft;
+    p_attr = attrs +> List.map (vk_attribute_s bigf);
   }
 
 let vk_arguments_s = fun bigf args ->

@@ -40,6 +40,7 @@ and typeCbis =
   | ParenType of fullType
   | TypeOfExpr of expression
   | TypeOfType of fullType
+  | AutoType (* c++ >= 11 *)
 and baseType =
     Void
   | IntType of intType
@@ -72,6 +73,7 @@ and parameterType = {
   p_namei : name option;
   p_register : bool wrap;
   p_type : fullType;
+  p_attr : attribute list;
 }
 and typeQualifier = typeQualifierbis wrap
 and typeQualifierbis = { const : bool; volatile : bool; }
@@ -102,7 +104,7 @@ and expressionbis =
   | RecordPtAccess of expression * name
   | SizeOfExpr of expression
   | SizeOfType of fullType
-  | Cast of fullType * expression
+  | Cast of fullType * attribute list * expression
   | StatementExpr of compound wrap
   | Constructor of fullType * initialiser
   | ParenExpr of expression
@@ -119,7 +121,7 @@ and constant =
   | Int of (string * intType)
   | Float of (string * floatType)
   | DecimalConst of (string * string * string)
-and isWchar = IsWchar | IsChar
+and isWchar = IsWchar | IsUchar | Isuchar | Isu8char | IsChar
 and unaryOp = GetRef | DeRef | UnPlus | UnMinus | Tilde | Not | GetRefLabel
 and assignOpbis = SimpleAssign | OpAssign of arithOp
 and assignOp = assignOpbis wrap
@@ -199,7 +201,9 @@ and exec_code_bis = ExecEval of expression | ExecToken
 and exec_code = exec_code_bis wrap
 and declaration =
     DeclList of onedecl wrap2 list wrap
-  | MacroDecl of (storagebis * string * argument wrap2 list * bool) wrap
+  | MacroDecl of
+      (storagebis * string * argument wrap2 list * attribute list * bool)
+        wrap
   | MacroDeclInit of
       (storagebis * string * argument wrap2 list * initialiser) wrap
 and onedecl = {
@@ -286,7 +290,7 @@ and ifdefkind =
 and ifdef_guard =
     Gifdef of macro_symbol
   | Gifndef of macro_symbol
-  | Gif_str of string
+  | Gif_str of Lexing.position * string
   | Gif of expression
   | Gnone
 and macro_symbol = string
@@ -322,6 +326,7 @@ and metavar_binding_kind =
   | MetaStmtListVal of statement_sequencable list * stripped
   | MetaDParamListVal of string wrap wrap2 list
   | MetaFmtVal of string_format
+  | MetaAttributeVal of attribute
   | MetaFragListVal of string_fragment list
   | MetaAssignOpVal of assignOp
   | MetaBinaryOpVal of binaryOp

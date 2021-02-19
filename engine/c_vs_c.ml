@@ -135,9 +135,11 @@ and typeC tya tyb =
           let iix = iia in
           acc >>= (fun xs ->
 
-            let {p_register = (ba,iiba); p_namei = saopt; p_type = ta} =
+            let {p_register = (ba,iiba); p_namei = saopt; p_type = ta;
+                 p_attr = attrsa} =
               parama in
-            let {p_register = (bb,iibb); p_namei = sbopt; p_type = tb} =
+            let {p_register = (bb,iibb); p_namei = sbopt; p_type = tb;
+                 p_attr = attrsb} =
               paramb in
 
             let bx = ba in
@@ -145,13 +147,15 @@ and typeC tya tyb =
 
             let sxopt = saopt in
 
+            let attrsx = attrsa in
 
             (* todo?  iso on name or argument ? *)
-            (ba = bb && same_s saopt sbopt) >&&>
+            (ba = bb && same_s saopt sbopt && attrsa = attrsb) >&&>
             fullType ta tb >>= (fun tx ->
               let paramx = { p_register = (bx, iibx);
                              p_namei = sxopt;
-                             p_type = tx; } in
+                             p_type = tx;
+                             p_attr = attrsx; } in
               return ((paramx,iix)::xs)
             )
           )
@@ -196,6 +200,8 @@ and typeC tya tyb =
     | a, TypeOfType b ->
 *)
 
+  | AutoType, AutoType -> return (AutoType, iix)
+
 
   | StructUnion (sua, saopt, sta), StructUnion (sub, sbopt, stb) ->
       (sua = sub && saopt = sbopt && List.length sta = List.length stb)
@@ -222,8 +228,6 @@ and typeC tya tyb =
                     acc2 >>= (fun xs ->
                       match fielda, fieldb with
                       | Simple (nameaopt, ta), Simple (namebopt, tb) ->
-
-
                           same_s nameaopt namebopt >&&>
                           fullType ta tb >>= (fun tx ->
                             return (((Simple (nameaopt, tx)), iix)::xs)
@@ -243,6 +247,14 @@ and typeC tya tyb =
                    return (((DeclarationField
                                (FieldDeclList (List.rev fx,iipt))))::xs)
                  )
+	    (* TODO: MacroDeclField args may contain typedefs that will not be
+	       handled by eq_type *)
+	    | (MacroDeclField _,MacroDeclField _)
+	    | (CppDirectiveStruct _,CppDirectiveStruct _)
+	    | (IfdefStruct _,IfdefStruct _) ->
+		if Lib_parsing_c.al_field fielda = Lib_parsing_c.al_field fieldb
+		then return (fielda::xs)
+		else fail
             | _ -> fail
           )
 

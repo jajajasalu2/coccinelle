@@ -287,11 +287,11 @@ module XTRANS = struct
     let fn = Visitor_ast.rebuilder
 	mcode mcode mcode mcode mcode mcode mcode mcode mcode
 	mcode mcode mcode mcode mcode
-	donothing donothing donothing donothing donothing donothing
+	donothing donothing donothing donothing donothing donothing donothing
 	ident expression donothing donothing donothing donothing
 	donothing donothing donothing donothing donothing donothing
 	donothing donothing donothing donothing donothing donothing
-	donothing donothing in
+	donothing donothing donothing donothing in
 
   fn.Visitor_ast.rebuilder_anything anything
 
@@ -380,7 +380,7 @@ module XTRANS = struct
 	  (Ast_cocci.MINUS
 	     (old_pos,Common.union_set old_inst new_inst,old_adj,
 	      Ast_cocci.NOREPLACEMENT),
-	   [tin.binding]);
+	   [clean_env tin.binding]);
         (if !Flag_matcher.show_misc
         then pr2_once "already tagged but only removed, so safe")
 
@@ -621,6 +621,9 @@ module XTRANS = struct
   let distribute_mck_ini (maxpos, minpos) = fun (lop,mop,rop,bop) -> fun x ->
     Visitor_c.vk_ini_s (mk_bigf (maxpos, minpos) (lop,mop,rop,bop)) x
 
+  let distribute_mck_attr (maxpos, minpos) = fun (lop,mop,rop,bop) -> fun x ->
+    Visitor_c.vk_attribute_s (mk_bigf (maxpos, minpos) (lop,mop,rop,bop)) x
+
   let distribute_mck_inis (maxpos, minpos) = fun (lop,mop,rop,bop) -> fun x ->
     Visitor_c.vk_inis_splitted_s (mk_bigf (maxpos, minpos) (lop,mop,rop,bop)) x
 
@@ -750,6 +753,8 @@ module XTRANS = struct
     distrf (Lib_parsing_c.ii_of_ident_list,distribute_mck_ident_list)
   let distrf_exec_code_list =
     distrf (Lib_parsing_c.ii_of_exec_code_list,distribute_mck_exec_code_list)
+  let distrf_attr =
+    distrf (Lib_parsing_c.ii_of_attr,distribute_mck_attr)
   let distrf_attrs =
     distrf (Lib_parsing_c.ii_of_attrs,distribute_mck_attrs)
 

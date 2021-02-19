@@ -128,6 +128,7 @@ and metavar =
   | MetaPosDecl of arity * meta_name (* name *)
   | MetaComDecl of arity * meta_name (* name *)
   | MetaFmtDecl of arity * meta_name (* name *)
+  | MetaAttributeDecl of arity * meta_name (* name *)
   | MetaFragListDecl of arity * meta_name (* name *) * list_len (*len*)
   | MetaAnalysisDecl of string * meta_name (* name *)
   | MetaDeclarerDecl of arity * meta_name (* name *)
@@ -136,8 +137,14 @@ and metavar =
 
 and list_len = AnyLen | MetaLen of meta_name * constraints | CstLen of int
 
-and seed = NoVal | StringSeed of string | ListSeed of seed_elem list
+and seed = NoVal | StringSeed of string | ListSeed of seed_elem list | ScriptSeed of seed_script
 and seed_elem = SeedString of string | SeedId of meta_name
+and seed_script = (* similar to script_constraint but kept separated to allow more flexibility *)
+      string (* name of generated function *) *
+	string (* language *) *
+	(meta_name * metavar) list (* params *) *
+	script_position *
+	string (* code *)
 
 (* --------------------------------------------------------------------- *)
 (* --------------------------------------------------------------------- *)
@@ -171,7 +178,7 @@ and base_expression =
     Ident          of ident
   | Constant       of constant mcode
   | StringConstant of string mcode (* quote *) * string_fragment dots *
-		      string mcode (* quote *)
+		      string mcode (* quote *) * isWchar
   | FunCall        of expression * string mcode (* ( *) *
                       expression dots * string mcode (* ) *)
   | Assignment     of expression * assignOp * expression *
@@ -188,8 +195,8 @@ and base_expression =
 	              string mcode (* ] *)
   | RecordAccess   of expression * string mcode (* . *) * ident
   | RecordPtAccess of expression * string mcode (* -> *) * ident
-  | Cast           of string mcode (* ( *) * fullType * string mcode (* ) *) *
-                      expression
+  | Cast           of string mcode (* ( *) * fullType * attr list *
+                      string mcode (* ) *) * expression
   | SizeOfExpr     of string mcode (* sizeof *) * expression
   | SizeOfType     of string mcode (* sizeof *) * string mcode (* ( *) *
                       fullType * string mcode (* ) *)
@@ -312,11 +319,12 @@ and arithOp =
 and  logicalOp = Inf | Sup | InfEq | SupEq | Eq | NotEq | AndLog | OrLog
 
 and constant =
-    String of string
-  | Char   of string
+    String of string * isWchar
+  | Char   of string * isWchar
   | Int    of string
   | Float  of string
   | DecimalConst of (string * string * string)
+and isWchar = IsWchar | IsUchar | Isuchar | Isu8char | IsChar
 
 (* --------------------------------------------------------------------- *)
 (* Types *)
@@ -333,9 +341,9 @@ and base_typeC =
     BaseType        of baseType * string mcode list (* Yoann style *)
   | SignedT         of sign mcode * typeC option
   | Pointer         of fullType * string mcode (* * *)
-  | FunctionPointer of fullType *
-	          string mcode(* ( *)*string mcode(* * *)*string mcode(* ) *)*
-                  string mcode (* ( *)*parameter_list*string mcode(* ) *)
+  | ParenType       of string mcode (* ( *) * fullType * string mcode (* ) *)
+  | FunctionType    of fullType *
+                  string mcode (* ( *) * parameter_list * string mcode (* ) *)
   | Array           of fullType * string mcode (* [ *) *
 	               expression option * string mcode (* ] *)
   | Decimal         of string mcode (* decimal *) * string mcode (* ( *) *
@@ -344,7 +352,7 @@ and base_typeC =
 	               string mcode (* ) *) (* IBM C only *)
   | EnumName        of string mcode (*enum*) * ident option (* name *)
   | EnumDef  of fullType (* either EnumName or metavar *) *
-	string mcode (* { *) * expression dots * string mcode (* } *)
+	string mcode (* { *) * enum_decl dots * string mcode (* } *)
   | StructUnionName of structUnion mcode * ident option (* name *)
   | StructUnionDef  of fullType (* either StructUnionName or metavar *) *
 	string mcode (* { *) * annotated_field dots * string mcode (* } *)
@@ -353,6 +361,7 @@ and base_typeC =
   | TypeOfType      of string mcode (* sizeof *) * string mcode (* ( *) *
                        fullType * string mcode (* ) *)
   | TypeName        of string mcode (* pad: should be 'of ident' ? *)
+  | AutoType        of string mcode (* auto *) (* c++ >= 11 *)
 
   | MetaType        of meta_name mcode * constraints * keep_binding *
 	inherited
@@ -388,10 +397,11 @@ and base_declaration =
 	string mcode (* ( *) * parameter_list *
 	(string mcode (* , *) * string mcode (* ...... *) ) option *
 	string mcode (* ) *) * string mcode (* ; *)
-  | TyDecl of fullType * string mcode (* ; *)
+  | TyDecl of fullType * attr list * string mcode (* ; *)
   | MacroDecl of storage mcode option *
 	ident (* name *) * string mcode (* ( *) *
-        expression dots * string mcode (* ) *) * string mcode (* ; *)
+        expression dots * string mcode (* ) *) *
+        attr list * string mcode (* ; *)
   | MacroDeclInit of storage mcode option *
 	ident (* name *) * string mcode (* ( *) *
         expression dots * string mcode (* ) *) * string mcode (*=*) *
@@ -418,9 +428,6 @@ and annotated_decl = base_annotated_decl wrap
 
 and base_field =
     Field of fullType * ident option * bitfield option * string mcode (* ; *)
-  | DisjField of field list
-  | ConjField of field list
-  | OptField of field
   | MetaField of meta_name mcode * constraints * keep_binding * inherited
   | MetaFieldList of meta_name mcode * listlen * constraints * keep_binding *
 	inherited
@@ -432,9 +439,19 @@ and field = base_field wrap
 and base_annotated_field =
     FElem of mcodekind (* before the decl *) * bool (* true if all minus *) *
       field
-  | Fdots    of string mcode (* ... *) * field option (* whencode *)
+  | Fdots     of string mcode (* ... *) * field option (* whencode *)
+  | DisjField of annotated_field list
+  | ConjField of annotated_field list
+  | OptField  of annotated_field
 
 and annotated_field = base_annotated_field wrap
+
+and base_enum_decl =
+    Enum of ident * (string mcode (* = *) * expression) option
+  | EnumComma of string mcode (* , *)
+  | EnumDots of string mcode (* ... *) * enum_decl option (* whencode *)
+
+and enum_decl = base_enum_decl wrap
 
 (* --------------------------------------------------------------------- *)
 (* Initializers *)
@@ -472,8 +489,8 @@ and initialiser = base_initialiser wrap
 (* Parameter *)
 
 and base_parameterTypeDef =
-    VoidParam     of fullType
-  | Param         of fullType * ident option
+    VoidParam     of fullType * attr list
+  | Param         of fullType * ident option * attr list
 
   | MetaParam     of meta_name mcode * constraints * keep_binding * inherited
   | MetaParamList of meta_name mcode * listlen * constraints * keep_binding *
@@ -608,7 +625,11 @@ and fninfo =
   | FInline of string mcode
   | FAttr of attr
 
-and attr = string mcode
+and base_attr =
+    Attribute of string mcode
+  | MetaAttribute of meta_name mcode * constraints * keep_binding * inherited
+
+and attr = base_attr wrap
 
 and metaStmtInfo =
     NotSequencible | SequencibleAfterDots of dots_whencode list | Sequencible
@@ -776,6 +797,7 @@ and anything =
   | LogicalOpTag        of logicalOp
   | DeclarationTag      of declaration
   | FieldTag            of field
+  | EnumDeclTag         of enum_decl
   | InitTag             of initialiser
   | StorageTag          of storage
   | IncFileTag          of inc_file
@@ -784,6 +806,7 @@ and anything =
   | ForInfoTag          of forinfo
   | CaseLineTag         of case_line
   | StringFragmentTag   of string_fragment
+  | AttributeTag        of attr
   | ConstVolTag         of const_vol
   | Token               of string * info option
   | Directive           of added_string list
@@ -793,6 +816,7 @@ and anything =
   | StmtDotsTag         of statement dots
   | AnnDeclDotsTag      of annotated_decl dots
   | AnnFieldDotsTag     of annotated_field dots
+  | EnumDeclDotsTag     of enum_decl dots
   | DefParDotsTag       of define_param dots
   | TypeCTag            of typeC
   | ParamTag            of parameterTypeDef
@@ -892,6 +916,7 @@ let get_meta_name = function
   | MetaPosDecl(_ar,nm) -> nm
   | MetaComDecl(_ar,nm) -> nm
   | MetaFmtDecl(_ar,nm) -> nm
+  | MetaAttributeDecl(_ar,nm) -> nm
   | MetaFragListDecl(_ar,nm,_nm1) -> nm
   | MetaAnalysisDecl(_code,nm) -> nm
   | MetaDeclarerDecl(_ar,nm) -> nm
@@ -918,6 +943,7 @@ and tag2c = function
   | LogicalOpTag _ -> "LogicalOpTag"
   | DeclarationTag _ -> "DeclarationTag"
   | FieldTag _ -> "FieldTag"
+  | EnumDeclTag _ -> "EnumDeclTag"
   | InitTag _      -> "InitTag"
   | StorageTag _   -> "StorageTag"
   | IncFileTag _   -> "IncFileTag"
@@ -926,6 +952,7 @@ and tag2c = function
   | ForInfoTag _   -> "ForInfoTag"
   | CaseLineTag _  -> "CaseLineTag"
   | StringFragmentTag _ -> "StringFragmentTag"
+  | AttributeTag _ -> "AttributeTag"
   | ConstVolTag _  -> "ConstVolTag"
   | Token _ -> "Token"
   | Directive _ -> "Directive"
@@ -935,6 +962,7 @@ and tag2c = function
   | StmtDotsTag _ -> "StmtDotsTag"
   | AnnDeclDotsTag _ -> "AnnDeclDotsTag"
   | AnnFieldDotsTag _ -> "AnnFieldDotsTag"
+  | EnumDeclDotsTag _ -> "EnumDeclDotsTag"
   | DefParDotsTag _ -> "DefParDotsTag"
   | TypeCTag _ -> "TypeCTag"
   | ParamTag _ -> "ParamTag"
@@ -1098,8 +1126,10 @@ let rec string_of_typeC ty =
       ssign ^ " " ^ Common.default "" string_of_typeC ty'
   | Pointer (ty', _) ->
       string_of_fullType ty' ^ "*"
-  | FunctionPointer (ty', _, _, _, _, _, _) ->
-      string_of_fullType ty' ^ "(*)()"
+  | ParenType (_ , ty', _) ->
+      "(" ^ string_of_fullType ty' ^ ")"
+  | FunctionType (ty' , _, _, _) ->
+      string_of_fullType ty' ^ "()"
   | Array (ty', _, _, _) ->
       string_of_fullType ty' ^ "[]"
   | Decimal(_, _, e0, _, e1, _) ->
@@ -1116,6 +1146,7 @@ let rec string_of_typeC ty =
   | TypeOfExpr(_,_,e,_) -> "typeof("^string_of_expression e^")"
   | TypeOfType(_,_,t,_) -> "typeof("^string_of_fullType t^")"
   | TypeName (name) -> unwrap_mcode name ^ " "
+  | AutoType _ -> "auto"
   | MetaType (m, _, _, _) -> string_of_meta_name (unwrap_mcode m) ^ " "
 and string_of_fullType ty =
   match unwrap ty with
@@ -1136,6 +1167,9 @@ let ident_of_expression_opt expression =
   match unwrap expression with
     Ident ident -> Some ident
   | _ -> None
+
+let string_of_meta_name (rule, name) =
+  rule ^ "." ^ name
 
 type 'a transformer = {
     baseType: (baseType -> string mcode list -> 'a) option;
@@ -1176,8 +1210,10 @@ and typeC_map tr ty =
         | Some f -> rewrap ty (f ty' s)
       end
   | Pointer (ty', s) -> rewrap ty (Pointer (fullType_map tr ty', s))
-  | FunctionPointer (ty, s0, s1, s2, s3, s4, s5) ->
-      rewrap ty (FunctionPointer (fullType_map tr ty, s0, s1, s2, s3, s4, s5))
+  | ParenType (s0, ty', s1) ->
+      rewrap ty (ParenType (s0, fullType_map tr ty', s1))
+  | FunctionType (ty', s0, s1, s2) ->
+      rewrap ty (FunctionType (fullType_map tr ty', s0, s1, s2))
   | Array (ty', s0, s1, s2) ->
       rewrap ty (Array (fullType_map tr ty', s0, s1, s2))
   | EnumName (s0, ident) ->
@@ -1201,6 +1237,7 @@ and typeC_map tr ty =
           None -> ty
         | Some f -> rewrap ty (f name)
       end
+  | AutoType _ -> ty
   | MetaType (name, cstr, keep, inherited) ->
       begin
         match tr.metaType with
@@ -1236,7 +1273,8 @@ and typeC_fold tr ty v =
   | SignedT (_, None) -> v
   | SignedT (_, Some ty') -> typeC_fold tr ty' v
   | Pointer (ty', _)
-  | FunctionPointer (ty', _, _, _, _, _, _)
+  | ParenType (_, ty', _)
+  | FunctionType (ty', _, _, _)
   | Array (ty', _, _, _)
   | EnumDef (ty', _, _, _)
   | StructUnionDef (ty', _, _, _) -> fullType_fold tr ty' v
@@ -1248,6 +1286,7 @@ and typeC_fold tr ty v =
   | TypeOfExpr(_,_,e,_) -> v
   | TypeOfType(_,_,t,_) -> fullType_fold tr t v
   | TypeName name -> Common.default v (fun f -> f name v) tr.typeName
+  | AutoType _ -> v
   | MetaType (name, cstr, keep, inherited) ->
       Common.default v (fun f -> f name cstr keep inherited v) tr.metaType
 

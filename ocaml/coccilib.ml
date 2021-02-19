@@ -50,6 +50,9 @@ type pos = {
 type param_type =
     Pos of pos list
   | Com of (string list * string list * string list) list
+  | AstCom of (Token_c.comment_like_token list *
+		 Token_c.comment_like_token list *
+		 Token_c.comment_like_token list) list
   | AssignOp of Ast_c.assignOp
   | BinaryOp of Ast_c.binaryOp
   | Str of string
@@ -67,6 +70,7 @@ type param_type =
   | FieldList of Ast_c.field list
   | FragList of Ast_c.string_fragment list
   | Fmt of Ast_c.string_format
+  | Attribute of Ast_c.attribute
   | Stmt of Ast_c.statement
   | StmtList of Ast_c.statement_sequencable list
 
@@ -83,6 +87,10 @@ let fcts :
 
 let bool_fcts :
  (string, param_type list -> bool) Hashtbl.t =
+  Hashtbl.create 11 (* Use prime number *)
+
+let string_fcts :
+ (string, param_type list -> string) Hashtbl.t =
   Hashtbl.create 11 (* Use prime number *)
 
 let variables_to_merge: (unit -> string array) ref = ref (fun () -> [| |])

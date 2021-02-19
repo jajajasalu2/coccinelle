@@ -335,6 +335,7 @@ module XMATCH = struct
   let distrf_define_params  = distrf Lib_parsing_c.ii_of_define_params
   let distrf_ident_list     = distrf Lib_parsing_c.ii_of_ident_list
   let distrf_exec_code_list = distrf Lib_parsing_c.ii_of_exec_code_list
+  let distrf_attr           = distrf Lib_parsing_c.ii_of_attr
   let distrf_attrs          = distrf Lib_parsing_c.ii_of_attrs
 
 
@@ -537,6 +538,12 @@ module XMATCH = struct
 		   (if strip
 		   then Lib_parsing_c.al_string_format a
 		   else Lib_parsing_c.semi_al_string_format a))
+          | Ast_c.MetaAttributeVal a ->
+	      success
+		(Ast_c.MetaAttributeVal
+		   (if strip
+		   then Lib_parsing_c.al_attribute a
+		   else Lib_parsing_c.semi_al_attribute a))
 
           | Ast_c.MetaPosVal (pos1,pos2) ->
 	      success(Ast_c.MetaPosVal (pos1,pos2))
@@ -561,15 +568,31 @@ module XMATCH = struct
 	      lazy
 		(let infos =
 		  List.filter (function ii -> not (Ast_c.is_fake ii)) infos in
-		let infos = List.sort Ast_c.compare_pos infos in
+		let rec uniq = function
+		    x::y::xs ->
+		      if Ast_c.compare_pos x y = 0
+		      then uniq (x::xs)
+		      else x :: uniq (y :: xs)
+		  | l -> l in
+		let infos = uniq(List.sort Ast_c.compare_pos infos) in
 		match (infos,List.rev infos) with
 		  ([],_) | (_,[]) -> [([],[],[])]
 		| (fst::mid,last::_) ->
-		    let before = Ast_c.get_comments_before fst in
-		    let after = Ast_c.get_comments_after last in
+		    let get_real_comments l =
+		      List.filter
+			(function
+			    (Token_c.TComment,_)
+			  | (Token_c.TCommentCpp _,_) -> true
+			  | _ -> false)
+			l in
+		    let before =
+		      get_real_comments(Ast_c.get_comments_before fst) in
+		    let after =
+		      get_real_comments(Ast_c.get_comments_after last) in
 		    let mid =
-		      List.concat
-			(List.map Ast_c.get_comments_before mid) in
+		      get_real_comments
+			(List.concat
+			   (List.map Ast_c.get_comments_before mid)) in
 		    [(before,mid,after)]) in
 	    let rec loop tin = function
 		[] -> finish tin

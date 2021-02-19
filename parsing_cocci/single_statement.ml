@@ -124,7 +124,7 @@ let rec left_expression e =
   match Ast0.unwrap e with
     Ast0.Ident(id) -> left_ident id
   | Ast0.Constant(const) -> modif_before_mcode const
-  | Ast0.StringConstant(lq,str,rq) -> modif_before_mcode lq
+  | Ast0.StringConstant(lq,str,rq,_sz) -> modif_before_mcode lq
   | Ast0.FunCall(fn,lp,args,rp) -> left_expression fn
   | Ast0.Assignment(left,op,right,_) -> left_expression left
   | Ast0.Sequence(left,op,right) -> left_expression left
@@ -138,7 +138,7 @@ let rec left_expression e =
   | Ast0.ArrayAccess(exp1,lb,exp2,rb) -> left_expression exp1
   | Ast0.RecordAccess(exp,pt,field) -> left_expression exp
   | Ast0.RecordPtAccess(exp,ar,field) -> left_expression exp
-  | Ast0.Cast(lp,ty,rp,exp) -> modif_before_mcode lp
+  | Ast0.Cast(lp,ty,attr,rp,exp) -> modif_before_mcode lp
   | Ast0.SizeOfExpr(szf,exp) -> modif_before_mcode szf
   | Ast0.SizeOfType(szf,lp,ty,rp) -> modif_before_mcode szf
   | Ast0.TypeExp(ty) -> left_typeC ty
@@ -165,7 +165,8 @@ and left_typeC t =
   | Ast0.BaseType(ty,strings) -> modif_before_mcode (List.hd strings)
   | Ast0.Signed(sgn,ty) -> modif_before_mcode sgn
   | Ast0.Pointer(ty,star) -> left_typeC ty
-  | Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) -> left_typeC ty
+  | Ast0.ParenType(lp,ty,rp) -> modif_before_mcode lp
+  | Ast0.FunctionType(ty,lp,params,rp) -> left_typeC ty
   | Ast0.Array(ty,lb,size,rb) -> left_typeC ty
   | Ast0.Decimal(dec,lp,length,comma,precision_opt,rp) ->
       modif_before_mcode dec
@@ -176,6 +177,7 @@ and left_typeC t =
   | Ast0.TypeOfExpr(tf,_,_,_) -> modif_before_mcode tf
   | Ast0.TypeOfType(tf,_,_,_) -> modif_before_mcode tf
   | Ast0.TypeName(name) -> modif_before_mcode name
+  | Ast0.AutoType(auto) -> modif_before_mcode auto
   | Ast0.MetaType(name,_,_) -> modif_before_mcode name
   | Ast0.DisjType(lp,types,mids,rp) -> List.exists left_typeC types
   | Ast0.ConjType(lp,types,mids,rp) -> List.exists left_typeC types
@@ -198,12 +200,12 @@ and left_declaration d =
   | Ast0.FunProto(fninfo,name,lp1,params,va,rp1,sem) ->
       (* should not be nested in anything anyway *)
       false
-  | Ast0.MacroDecl(Some stg,name,lp,args,rp,sem) -> modif_before_mcode stg
-  | Ast0.MacroDecl(None,name,lp,args,rp,sem) -> left_ident name
+  | Ast0.MacroDecl(Some stg,name,lp,args,rp,attr,sem) -> modif_before_mcode stg
+  | Ast0.MacroDecl(None,name,lp,args,rp,attr,sem) -> left_ident name
   | Ast0.MacroDeclInit(Some stg,name,lp,args,rp,eq,ini,sem) ->
       modif_before_mcode stg
   | Ast0.MacroDeclInit(None,name,lp,args,rp,eq,ini,sem) -> left_ident name
-  | Ast0.TyDecl(ty,sem) -> left_typeC ty
+  | Ast0.TyDecl(ty,attr,sem) -> left_typeC ty
   | Ast0.Typedef(stg,ty,id,sem) -> modif_before_mcode stg
   | Ast0.DisjDecl(_,decls,_,_) -> List.exists left_declaration decls
   | Ast0.ConjDecl(_,decls,_,_) -> List.exists left_declaration decls
@@ -217,9 +219,9 @@ and right_declaration d =
   | Ast0.Init(_,ty,id,eq,ini,attr,sem) -> modif_after_mcode sem
   | Ast0.UnInit(_,ty,id,attr,sem) -> modif_after_mcode sem
   | Ast0.FunProto(fninfo,name,lp1,params,va,rp1,sem) -> modif_after_mcode sem
-  | Ast0.MacroDecl(_,name,lp,args,rp,sem) -> modif_after_mcode sem
+  | Ast0.MacroDecl(_,name,lp,args,rp,attr,sem) -> modif_after_mcode sem
   | Ast0.MacroDeclInit(_,name,lp,args,rp,eq,ini,sem) -> modif_after_mcode sem
-  | Ast0.TyDecl(ty,sem) -> modif_after_mcode sem
+  | Ast0.TyDecl(ty,attr,sem) -> modif_after_mcode sem
   | Ast0.Typedef(stg,ty,id,sem) -> modif_after_mcode sem
   | Ast0.DisjDecl(_,decls,_,_) -> List.exists right_declaration decls
   | Ast0.ConjDecl(_,decls,_,_) -> List.exists right_declaration decls
@@ -458,9 +460,10 @@ and contains_only_minus =
   V0.flat_combiner bind option_default
     mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
     mcode mcode mcode
-    dots dots dots dots dots dots dots dots
+    dots dots dots dots dots dots dots dots dots
     identifier expression donothing donothing typeC donothing donothing
-    declaration field statement donothing case_line donothing donothing
+    declaration field donothing statement donothing case_line donothing
+    donothing donothing
 
 
 (* needs a special case when there is a Disj or an empty DOTS *)

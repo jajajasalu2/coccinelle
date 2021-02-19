@@ -177,6 +177,7 @@ let is_statement = function
 let is_start_of_something = function
   | Tchar _  | Tshort _ | Tint _ | Tdouble _ |  Tfloat _ | Tlong _
   | Tunsigned _ | Tsigned _ | Tvoid _ | Tsize_t _ | Tssize_t _ | Tptrdiff_t _
+  | TautoType _
   | Tauto _ | Tregister _ | Textern _ | Tstatic _
   | Tconst _ | Tvolatile _
   | Ttypedef _
@@ -217,6 +218,7 @@ let is_ident_like = function
   | TMacroAttr _
   | TMacroEndAttr _
   | TMacroStmt _
+  | TMacroIdStmt _
   | TMacroString _
   | TMacroDecl _
   | TMacroDeclConst _
@@ -332,15 +334,16 @@ let info_of_tok = function
 
   | TUnknown             (i) -> i
 
-  | TMacroIdentBuilder             (s, i) -> i
+  | TMacroIdentBuilder     (s, i) -> i
   | TMacroAttr             (s, i) -> i
-  | TMacroEndAttr             (s, i) -> i
+  | TMacroEndAttr          (s, i) -> i
   | TMacroStmt             (s, i) -> i
-  | TMacroString             (s, i) -> i
+  | TMacroIdStmt           (s, i) -> i
+  | TMacroString           (s, i) -> i
   | TMacroDecl             (s, i) -> i
-  | TMacroDeclConst             (i) -> i
-  | TMacroIterator             (s,i) -> i
-(*  | TMacroTop             (s,i) -> i *)
+  | TMacroDeclConst        (i) -> i
+  | TMacroIterator         (s,i) -> i
+(*  | TMacroTop            (s,i) -> i *)
   | TCParEOL (i1) ->     i1
 
   | TAction             (i) -> i
@@ -417,6 +420,7 @@ let info_of_tok = function
   | Tsize_t              (i) -> i
   | Tssize_t             (i) -> i
   | Tptrdiff_t           (i) -> i
+  | TautoType            (i) -> i
   | Tauto                (i) -> i
   | Tregister            (i) -> i
   | Textern              (i) -> i
@@ -515,6 +519,7 @@ let visitor_info_of_tok f = function
   | TMacroAttr           (s, i)   -> TMacroAttr            (s, f i)
   | TMacroEndAttr        (s, i)   -> TMacroEndAttr         (s, f i)
   | TMacroStmt           (s, i)   -> TMacroStmt            (s, f i)
+  | TMacroIdStmt         (s, i)   -> TMacroIdStmt          (s, f i)
   | TMacroString         (s, i)   -> TMacroString          (s, f i)
   | TMacroDecl           (s, i) -> TMacroDecl            (s, f i)
   | TMacroDeclConst      (i)   -> TMacroDeclConst       (f i)
@@ -597,6 +602,7 @@ let visitor_info_of_tok f = function
   | Tsize_t              (i) -> Tsize_t              (f i)
   | Tssize_t             (i) -> Tssize_t             (f i)
   | Tptrdiff_t           (i) -> Tptrdiff_t           (f i)
+  | TautoType            (i) -> TautoType            (f i)
   | Tauto                (i) -> Tauto                (f i)
   | Tregister            (i) -> Tregister            (f i)
   | Textern              (i) -> Textern              (f i)
@@ -721,6 +727,7 @@ let string_of_token = function
   | Tsize_t _ -> "Tsize_t"
   | Tssize_t _ -> "Tssize_t"
   | Tptrdiff_t _ -> "Tptrdiff_t"
+  | TautoType _ -> "Tauto"
   | Tauto _ -> "Tauto"
   | Tregister _ -> "Tregister"
   | Textern _ -> "Textern"
@@ -786,6 +793,7 @@ let string_of_token = function
   | TMacroAttr _ -> "TMacroAttr"
   | TMacroEndAttr _ -> "TMacroEndAttr"
   | TMacroStmt _ -> "TMacroStmt"
+  | TMacroIdStmt _ -> "TMacroIdStmt"
   | TMacroIdentBuilder _ -> "TMacroIdentBuilder"
   | TMacroString _ -> "TMacroString"
   | TMacroDecl _ -> "TMacroDecl"

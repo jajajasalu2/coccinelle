@@ -36,8 +36,10 @@ let string_value = function
 		 (List.fold_left
 		    (fun prev cur ->
 		      match cur with
-			(Token_c.TComment,_) -> (Token_c.str_of_token cur) :: prev
-		      | (Token_c.TCommentCpp _,_) -> (Token_c.str_of_token cur) :: prev
+			(Token_c.TComment,_) ->
+			  (Token_c.str_of_token cur) :: prev
+		      | (Token_c.TCommentCpp _,_) ->
+			  (Token_c.str_of_token cur) :: prev
 		      | _ -> prev)
 		    [] l) in
 	     (com_strings bef,com_strings mid,com_strings aft))
@@ -74,9 +76,11 @@ let ast_binding vl = function
       | Ast_c.MetaStmtListVal(stm,_) -> Coccilib.StmtList stm
       | Ast_c.MetaFragListVal frags -> Coccilib.FragList frags
       | Ast_c.MetaFmtVal fmt -> Coccilib.Fmt fmt
+      | Ast_c.MetaAttributeVal attr -> Coccilib.Attribute attr
       | Ast_c.MetaNoVal -> failwith "no value for script metavariable"
+      | Ast_c.MetaComValList l -> Coccilib.AstCom l
 
-      | Ast_c.MetaPosVal _ | Ast_c.MetaPosValList _ | Ast_c.MetaComValList _
+      | Ast_c.MetaPosVal _ | Ast_c.MetaPosValList _
       | Ast_c.MetaListlenVal _ ->
 	  failwith "not associated with a declared metavariable"]
 
@@ -117,4 +121,9 @@ let run mv ve script_vars name code =
 let run_constraint ocamlname args =
   let args = List.map string_value args in
   let fn = Hashtbl.find Coccilib.bool_fcts ocamlname in
+  fn args
+
+let run_fresh_id ocamlname args =
+  let args = List.map string_value args in
+  let fn = Hashtbl.find Coccilib.string_fcts ocamlname in
   fn args

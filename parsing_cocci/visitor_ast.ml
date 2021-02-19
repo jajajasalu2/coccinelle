@@ -26,18 +26,22 @@ type 'a combiner =
      combiner_typeC : Ast.typeC -> 'a;
      combiner_declaration : Ast.declaration -> 'a;
      combiner_field : Ast.field -> 'a;
+     combiner_ann_field : Ast.annotated_field -> 'a;
+     combiner_enumdecl : Ast_cocci.enum_decl -> 'a;
      combiner_initialiser : Ast.initialiser -> 'a;
      combiner_parameter : Ast.parameterTypeDef -> 'a;
      combiner_parameter_list : Ast.parameter_list -> 'a;
      combiner_rule_elem : Ast.rule_elem -> 'a;
      combiner_statement : Ast.statement -> 'a;
      combiner_case_line : Ast.case_line -> 'a;
+     combiner_attribute : Ast.attr -> 'a;
      combiner_top_level : Ast.top_level -> 'a;
      combiner_anything : Ast.anything  -> 'a;
      combiner_expression_dots : Ast.expression Ast.dots -> 'a;
      combiner_statement_dots : Ast.statement Ast.dots -> 'a;
      combiner_anndecl_dots : Ast.annotated_decl Ast.dots -> 'a;
      combiner_annfield_dots : Ast.annotated_field Ast.dots -> 'a;
+     combiner_enumdecl_dots : Ast.enum_decl Ast.dots -> 'a;
      combiner_initialiser_dots : Ast.initialiser Ast.dots -> 'a}
 
 type ('mc,'a) cmcode = 'a combiner -> 'mc Ast_cocci.mcode -> 'a
@@ -49,11 +53,12 @@ let combiner bind option_default
     unary_mcodefn arithop_mcodefn logicalop_mcodefn
     cv_mcodefn sign_mcodefn struct_mcodefn storage_mcodefn
     inc_file_mcodefn
-    expdotsfn paramdotsfn stmtdotsfn anndecldotsfn annfielddotsfn initdotsfn
+    expdotsfn paramdotsfn stmtdotsfn anndecldotsfn annfielddotsfn
+    enumdecldotsfn initdotsfn
     identfn exprfn fragfn fmtfn assignOpfn binaryOpfn ftfn tyfn initfn
     paramfn define_paramfn declfn
-    annotated_declfn fieldfn annotated_fieldfn rulefn stmtfn casefn topfn
-    anyfn =
+    annotated_declfn fieldfn annotated_fieldfn enum_declfn rulefn stmtfn
+    casefn attributefn topfn anyfn =
   let multibind l =
     let rec loop = function
 	[] -> option_default
@@ -94,6 +99,8 @@ let combiner bind option_default
     dotsfn anndecldotsfn annotated_decl all_functions d
   and annotated_field_dots d =
     dotsfn annfielddotsfn annotated_field all_functions d
+  and enum_decl_dots d =
+    dotsfn enumdecldotsfn enum_decl all_functions d
   and initialiser_dots d = dotsfn initdotsfn initialiser all_functions d
   and string_fragment_dots d = dotsfn strdotsfn string_fragment all_functions d
   and exec_code_dots d = dotsfn ecdotsfn exec_code all_functions d
@@ -121,7 +128,7 @@ let combiner bind option_default
       match Ast.unwrap e with
 	Ast.Ident(id) -> ident id
       | Ast.Constant(const) -> const_mcode const
-      | Ast.StringConstant(lq,str,rq) ->
+      | Ast.StringConstant(lq,str,rq,_sz) ->
 	  let llq = string_mcode lq in
 	  let lstr = string_fragment_dots str in
 	  let lrq = string_mcode rq in
@@ -192,12 +199,13 @@ let combiner bind option_default
 	  let lar = string_mcode ar in
 	  let lfield = ident field in
 	  multibind [lexp; lar; lfield]
-      | Ast.Cast(lp,ty,rp,exp) ->
+      | Ast.Cast(lp,ty,attr,rp,exp) ->
 	  let llp = string_mcode lp in
 	  let lty = fullType ty in
+	  let lattr = multibind (List.map attribute attr) in
 	  let lrp = string_mcode rp in
 	  let lexp = expression exp in
-	  multibind [llp; lty; lrp; lexp]
+          multibind [llp; lty; lattr; lrp; lexp]
       | Ast.SizeOfExpr(szf,exp) ->
 	  let lszf = string_mcode szf in
 	  let lexp = expression exp in
@@ -296,19 +304,6 @@ let combiner bind option_default
       | Ast.OptType(ty) -> fullType ty in
     ftfn all_functions k ft
 
-  and function_pointer
-	(ty, lp1, star, (id : Ast.ident option), rp1, lp2, params, rp2) =
-    (* have to put the treatment of the identifier into the right position *)
-    let lty = fullType ty in
-    let llp1 = string_mcode lp1 in
-    let lstar = string_mcode star in
-    let lid = match id with Some idd -> [ident idd] | None -> [] in
-    let lrp1 = string_mcode rp1 in
-    let llp2 = string_mcode lp2 in
-    let lparams = parameter_dots params in
-    let lrp2 = string_mcode rp2 in
-    multibind ([lty; llp1; lstar] @ lid @ [lrp1; llp2; lparams; lrp2])
-
   and array_type (ty,(id : Ast.ident option),lb,size,rb) =
     let lty = fullType ty in
     let lid = match id with Some idd -> [ident idd] | None -> [] in
@@ -316,6 +311,52 @@ let combiner bind option_default
     let lsize = get_option expression size in
     let lrb = string_mcode rb in
     multibind ([lty] @ lid @ [lb; lsize; lrb])
+
+  and parentype_type (lp,ty,(id : Ast.ident option),rp) =
+    let function_pointer ty1 array_dec =
+      match Ast.unwrap ty1 with
+       Ast.Type(_,_,fty1) ->
+        (match Ast.unwrap fty1 with
+          Ast.Pointer(ty2,star) ->
+           (match Ast.unwrap ty2 with
+             Ast.Type(_,_,fty3) ->
+              (match Ast.unwrap fty3 with
+                Ast.FunctionType(ty3,lp3,params,rp3) ->
+                 let ltyp = fullType ty3 in
+                 let llp = string_mcode lp in
+                 let lstar = string_mcode star in
+                 let lid =
+                   match id with
+                     Some idd -> [ident idd]
+                   | None -> [] in
+                 let larray =
+                   match array_dec with
+                     Some(lb1,size1,rb1) ->
+                       let llb1 = string_mcode lb1 in
+                       let lsize1 = get_option expression size1 in
+                       let lrb1 = string_mcode rb1 in
+                       [llb1;lsize1;lrb1]
+                   | None -> [] in
+                 let lrp = string_mcode rp in
+                 let llp3 = string_mcode lp3 in
+                 let lparams = parameter_dots params in
+                 let lrp3 = string_mcode rp3 in
+                 multibind
+                   ([ltyp;llp;lstar] @ lid @ larray @
+                    [lrp;llp3;lparams;lrp3])
+             | _ -> failwith "ParenType Visitor_ast")
+           | _ -> failwith "ParenType Visitor_ast")
+         | _ -> failwith "ParenType Visitor_ast")
+       | _ -> failwith "ParenType Visitor_ast" in
+    match Ast.unwrap ty with
+      Ast.Type(_,_,fty1) ->
+        (match Ast.unwrap fty1 with
+          Ast.Array(ty1,lb1,size,rb1) ->
+            function_pointer ty1 (Some(lb1,size,rb1))
+        | Ast.Pointer(ty1,star) ->
+            function_pointer ty None
+        | _ -> failwith "ParenType Visitor_ast")
+     | _ -> failwith "ParenType Visitor_ast"
 
   and typeC ty =
     let k ty =
@@ -329,8 +370,14 @@ let combiner bind option_default
 	  let lty = fullType ty in
 	  let lstar = string_mcode star in
 	  bind lty lstar
-      | Ast.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-	  function_pointer (ty,lp1,star,None,rp1,lp2,params,rp2)
+      | Ast.ParenType(lp,ty,rp) ->
+          parentype_type (lp,ty,None,rp)
+      | Ast.FunctionType(ty,lp,params,rp) ->
+          let lty = fullType ty in
+          let llp = string_mcode lp in
+          let lparams = parameter_dots params in
+          let lrp = string_mcode rp in
+          multibind [lty; llp; lparams; lrp]
       | Ast.Array(ty,lb,size,rb) -> array_type (ty,None,lb,size,rb)
       | Ast.Decimal(dec,lp,length,comma,precision_opt,rp) ->
 	  let ldec = string_mcode dec in
@@ -347,7 +394,7 @@ let combiner bind option_default
       | Ast.EnumDef(ty,lb,ids,rb) ->
 	  let lty = fullType ty in
 	  let llb = string_mcode lb in
-	  let lids = expression_dots ids in
+	  let lids = enum_decl_dots ids in
 	  let lrb = string_mcode rb in
 	  multibind [lty; llb; lids; lrb]
       | Ast.StructUnionName(kind,name) ->
@@ -373,6 +420,7 @@ let combiner bind option_default
 	  let lrp = string_mcode rp in
 	  multibind [ltf; llp; lty; lrp]
       | Ast.TypeName(name) -> string_mcode name
+      | Ast.AutoType(auto) -> string_mcode auto
       | Ast.MetaType(name,_,_,_) -> meta_mcode name in
     tyfn all_functions k ty
 
@@ -380,9 +428,8 @@ let combiner bind option_default
     match Ast.unwrap ty with
       Ast.Type(_,None,ty1) ->
 	(match Ast.unwrap ty1 with
-	  Ast.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-	    function_pointer (ty, lp1, star, Some id, rp1, lp2, params, rp2)
 	| Ast.Array(ty,lb,size,rb) -> array_type (ty, Some id, lb, size, rb)
+        | Ast.ParenType(lp,ty,rp) -> parentype_type (lp, ty, Some id, rp)
 	| _ -> let lty = fullType ty in
 	       let lid = ident id in
 	       bind lty lid)
@@ -402,7 +449,7 @@ let combiner bind option_default
       |	Ast.Init(stg,ty,id,attr,eq,ini,sem) ->
 	  let lstg = get_option storage_mcode stg in
 	  let lid = named_type ty id in
-	  let lattr = multibind (List.map string_mcode attr) in
+	  let lattr = multibind (List.map attribute attr) in
 	  let leq = string_mcode eq in
 	  let lini = initialiser ini in
 	  let lsem = string_mcode sem in
@@ -410,7 +457,7 @@ let combiner bind option_default
       | Ast.UnInit(stg,ty,id,attr,sem) ->
 	  let lstg = get_option storage_mcode stg in
 	  let lid = named_type ty id in
-	  let lattr = multibind (List.map string_mcode attr) in
+	  let lattr = multibind (List.map attribute attr) in
 	  let lsem = string_mcode sem in
 	  multibind [lstg; lid; lattr; lsem]
       | Ast.FunProto(fi,name,lp1,params,va,rp1,sem) ->
@@ -425,14 +472,15 @@ let combiner bind option_default
 	  let lrp1 = string_mcode rp1 in
 	  multibind
 	    (lfi @ [lname; llp1; lparams] @ lcomma @ lellipsis @ [lrp1])
-      | Ast.MacroDecl(stg,name,lp,args,rp,sem) ->
+      | Ast.MacroDecl(stg,name,lp,args,rp,attr,sem) ->
 	  let lstg = get_option storage_mcode stg in
 	  let lname = ident name in
 	  let llp = string_mcode lp in
 	  let largs = expression_dots args in
 	  let lrp = string_mcode rp in
+	  let lattr = multibind (List.map attribute attr) in
 	  let lsem = string_mcode sem in
-	  multibind [lstg; lname; llp; largs; lrp; lsem]
+	  multibind [lstg; lname; llp; largs; lrp; lattr; lsem]
       | Ast.MacroDeclInit(stg,name,lp,args,rp,eq,ini,sem) ->
 	  let lstg = get_option storage_mcode stg in
 	  let lname = ident name in
@@ -443,10 +491,11 @@ let combiner bind option_default
 	  let lini = initialiser ini in
 	  let lsem = string_mcode sem in
 	  multibind [lstg; lname; llp; largs; lrp; leq; lini; lsem]
-      | Ast.TyDecl(ty,sem) ->
+      | Ast.TyDecl(ty,attr,sem) ->
 	  let lty = fullType ty in
+	  let lattr = multibind (List.map attribute attr) in
 	  let lsem = string_mcode sem in
-	  bind lty lsem
+	  multibind [lty; lattr; lsem]
       | Ast.Typedef(stg,ty,id,sem) ->
 	  let lstg = string_mcode stg in
 	  let lty = fullType ty in
@@ -480,10 +529,7 @@ let combiner bind option_default
 	    [lc; le] in
 	  let lbf = Common.default [] bitfield bf in
 	  let lsem = string_mcode sem in
-	  multibind ([lid] @ lbf @ [lsem])
-      | Ast.DisjField(decls)
-      | Ast.ConjField(decls) -> multibind (List.map field decls)
-      | Ast.OptField(decl) -> field decl in
+	  multibind ([lid] @ lbf @ [lsem]) in
     fieldfn all_functions k d
 
   and annotated_field d =
@@ -493,8 +539,31 @@ let combiner bind option_default
       | Ast.Fdots(dots,whncode) ->
 	  let ldots = string_mcode dots in
 	  let lwhncode = get_option field whncode in
-	  bind ldots lwhncode in
+	  bind ldots lwhncode
+      | Ast.DisjField(decls)
+      | Ast.ConjField(decls) ->
+	  multibind (List.map annotated_field decls)
+      | Ast.OptField(decl) -> annotated_field decl in
     annotated_fieldfn all_functions k d
+
+  and enum_decl d =
+    let k d =
+      match Ast.unwrap d with
+	Ast.Enum(name,enum_val) ->
+          let lname = ident name in
+          (match enum_val with
+            None -> lname
+          | Some(eq,eval) ->
+              let leq = string_mcode eq in
+              let leval = expression eval in
+              multibind [lname; leq; leval])
+      | Ast.EnumComma(cm) ->
+        string_mcode cm
+      | Ast.EnumDots(dots,whncode) ->
+        let ldots = string_mcode dots in
+        let lwhncode = get_option enum_decl whncode in
+	bind ldots lwhncode in
+    enum_declfn all_functions k d
 
   and initialiser i =
     let k i =
@@ -556,9 +625,18 @@ let combiner bind option_default
   and parameterTypeDef p =
     let k p =
       match Ast.unwrap p with
-	Ast.VoidParam(ty) -> fullType ty
-      | Ast.Param(ty,Some id) -> named_type ty id
-      | Ast.Param(ty,None) -> fullType ty
+        Ast.VoidParam(ty,attr) ->
+          let lty = fullType ty in
+          let lattr = multibind (List.map attribute attr) in
+          bind lty lattr
+      | Ast.Param(ty,Some id,attr) ->
+          let lid = named_type ty id in
+          let lattr = multibind (List.map attribute attr) in
+          bind lid lattr
+      | Ast.Param(ty,None,attr) ->
+          let lty = fullType ty in
+          let lattr = multibind (List.map attribute attr) in
+          bind lty lattr
       | Ast.MetaParam(name,_,_,_) -> meta_mcode name
       | Ast.MetaParamList(name,_,_,_,_) -> meta_mcode name
       |	Ast.AsParam(p,asexp) ->
@@ -838,7 +916,15 @@ let combiner bind option_default
       Ast.FStorage(stg) -> storage_mcode stg
     | Ast.FType(ty) -> fullType ty
     | Ast.FInline(inline) -> string_mcode inline
-    | Ast.FAttr(attr) -> string_mcode attr
+    | Ast.FAttr(attr) -> attribute attr
+
+  and attribute a =
+    let k a =
+      match Ast.unwrap a with
+        Ast.Attribute(attr) -> string_mcode attr
+      | Ast.MetaAttribute(name,_,_,_) -> meta_mcode name in
+    attributefn all_functions k a
+
 
   and whencode notfn alwaysfn = function
       Ast.WhenNot a -> notfn a
@@ -897,6 +983,7 @@ let combiner bind option_default
       | Ast.LogicalOpTag(logop) -> option_default
       | Ast.DeclarationTag(decl) -> declaration decl
       | Ast.FieldTag(decl) -> field decl
+      | Ast.EnumDeclTag(decl) -> enum_decl decl
       | Ast.InitTag(ini) -> initialiser ini
       | Ast.StorageTag(stg) -> option_default
       | Ast.IncFileTag(stg) -> option_default
@@ -905,6 +992,7 @@ let combiner bind option_default
       | Ast.ForInfoTag(rule) -> forinfo rule
       | Ast.CaseLineTag(case) -> case_line case
       | Ast.StringFragmentTag(frag) -> string_fragment frag
+      | Ast.AttributeTag(attr) -> attribute attr
       | Ast.ConstVolTag(cv) -> option_default
       | Ast.Token(tok,info) -> option_default
       | Ast.Directive(str) -> option_default
@@ -914,6 +1002,7 @@ let combiner bind option_default
       | Ast.StmtDotsTag(sd) -> statement_dots sd
       | Ast.AnnDeclDotsTag(sd) -> annotated_decl_dots sd
       | Ast.AnnFieldDotsTag(sd) -> annotated_field_dots sd
+      | Ast.EnumDeclDotsTag(sd) -> enum_decl_dots sd
       | Ast.DefParDotsTag(sd) -> define_param_dots sd
       | Ast.TypeCTag(ty) -> typeC ty
       | Ast.ParamTag(param) -> parameterTypeDef param
@@ -932,18 +1021,22 @@ let combiner bind option_default
       combiner_typeC = typeC;
       combiner_declaration = declaration;
       combiner_field = field;
+      combiner_ann_field = annotated_field;
+      combiner_enumdecl = enum_decl;
       combiner_initialiser = initialiser;
       combiner_parameter = parameterTypeDef;
       combiner_parameter_list = parameter_dots;
       combiner_rule_elem = rule_elem;
       combiner_statement = statement;
       combiner_case_line = case_line;
+      combiner_attribute = attribute;
       combiner_top_level = top_level;
       combiner_anything = anything;
       combiner_expression_dots = expression_dots;
       combiner_statement_dots = statement_dots;
       combiner_anndecl_dots = annotated_decl_dots;
       combiner_annfield_dots = annotated_field_dots;
+      combiner_enumdecl_dots = enum_decl_dots;
       combiner_initialiser_dots = initialiser_dots} in
   all_functions
 
@@ -962,17 +1055,21 @@ type rebuilder =
       rebuilder_typeC : Ast.typeC inout;
       rebuilder_declaration : Ast.declaration inout;
       rebuilder_field : Ast.field inout;
+      rebuilder_ann_field : Ast.annotated_field inout;
+      rebuilder_enumdecl : Ast_cocci.enum_decl inout;
       rebuilder_initialiser : Ast.initialiser inout;
       rebuilder_parameter : Ast.parameterTypeDef inout;
       rebuilder_parameter_list : Ast.parameter_list inout;
       rebuilder_statement : Ast.statement inout;
       rebuilder_case_line : Ast.case_line inout;
+      rebuilder_attribute : Ast.attr inout;
       rebuilder_rule_elem : Ast.rule_elem inout;
       rebuilder_top_level : Ast.top_level inout;
       rebuilder_expression_dots : Ast.expression Ast.dots inout;
       rebuilder_statement_dots : Ast.statement Ast.dots inout;
       rebuilder_anndecl_dots : Ast.annotated_decl Ast.dots inout;
       rebuilder_annfield_dots : Ast.annotated_field Ast.dots inout;
+      rebuilder_enumdecl_dots : Ast.enum_decl Ast.dots inout;
       rebuilder_initialiser_dots : Ast.initialiser Ast.dots inout;
       rebuilder_define_param_dots : Ast.define_param Ast.dots inout;
       rebuilder_define_param : Ast.define_param inout;
@@ -988,10 +1085,11 @@ let rebuilder
     fix_mcode unary_mcode
     arithop_mcode logicalop_mcode cv_mcode sign_mcode struct_mcode
     storage_mcode inc_file_mcode
-    expdotsfn paramdotsfn stmtdotsfn anndecldotsfn annfielddotsfn initdotsfn
+    expdotsfn paramdotsfn stmtdotsfn anndecldotsfn annfielddotsfn
+    enumdecldotsfn initdotsfn
     identfn exprfn fragfn fmtfn assignOpfn binaryOpfn ftfn tyfn initfn
     paramfn define_paramfn declfn annotated_declfn fieldfn annotated_fieldfn
-    rulefn stmtfn casefn topfn anyfn =
+    enum_declfn rulefn stmtfn casefn attributefn topfn anyfn =
   let get_option f = function
       Some x -> Some (f x)
     | None -> None in
@@ -1010,6 +1108,8 @@ let rebuilder
     dotsfn anndecldotsfn annotated_decl all_functions d
   and annotated_field_dots d =
     dotsfn annfielddotsfn annotated_field all_functions d
+  and enum_decl_dots d =
+    dotsfn enumdecldotsfn enum_decl all_functions d
   and initialiser_dots d = dotsfn initdotsfn initialiser all_functions d
   and string_fragment_dots d = dotsfn strdotsfn string_fragment all_functions d
   and exec_code_dots d = dotsfn ecdotsfn exec_code all_functions d
@@ -1037,11 +1137,11 @@ let rebuilder
 	(match Ast.unwrap e with
 	  Ast.Ident(id) -> Ast.Ident(ident id)
 	| Ast.Constant(const) -> Ast.Constant(const_mcode const)
-	| Ast.StringConstant(lq,str,rq) ->
+	| Ast.StringConstant(lq,str,rq,sz) ->
 	    let llq = string_mcode lq in
 	    let lstr = string_fragment_dots str in
 	    let lrq = string_mcode rq in
-	    Ast.StringConstant(llq, lstr, lrq)
+	    Ast.StringConstant(llq, lstr, lrq, sz)
 	| Ast.FunCall(fn,lp,args,rp) ->
 	    let lfn = expression fn in
 	    let llp = string_mcode lp in
@@ -1108,12 +1208,13 @@ let rebuilder
 	    let lar = string_mcode ar in
 	    let lfield = ident field in
 	    Ast.RecordPtAccess(lexp, lar, lfield)
-	| Ast.Cast(lp,ty,rp,exp) ->
+	| Ast.Cast(lp,ty,attr,rp,exp) ->
 	    let llp = string_mcode lp in
 	    let lty = fullType ty in
+	    let lattr = List.map attribute attr in
 	    let lrp = string_mcode rp in
 	    let lexp = expression exp in
-	    Ast.Cast(llp, lty, lrp, lexp)
+	    Ast.Cast(llp, lty, lattr, lrp, lexp)
 	| Ast.SizeOfExpr(szf,exp) ->
 	    let lszf = string_mcode szf in
 	    let lexp = expression exp in
@@ -1240,15 +1341,17 @@ let rebuilder
 	    let lty = fullType ty in
 	    let lstar = string_mcode star in
 	    Ast.Pointer (lty, lstar)
-	| Ast.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-	    let lty = fullType ty in
-	    let llp1 = string_mcode lp1 in
-	    let lstar = string_mcode star in
-	    let lrp1 = string_mcode rp1 in
-	    let llp2 = string_mcode lp2 in
-	    let lparams = parameter_dots params in
-	    let lrp2 = string_mcode rp2 in
-	    Ast.FunctionPointer(lty, llp1, lstar, lrp1, llp2, lparams, lrp2)
+        | Ast.ParenType(lp,ty,rp) ->
+            let llp = string_mcode lp in
+            let lty = fullType ty in
+            let lrp = string_mcode rp in
+            Ast.ParenType(llp,lty,lrp)
+        | Ast.FunctionType(ty,lp,params,rp) ->
+            let lty = fullType ty in
+            let llp = string_mcode lp in
+            let lparams = parameter_dots params in
+            let lrp = string_mcode rp in
+            Ast.FunctionType(lty,llp,lparams,lrp)
 	| Ast.Array(ty,lb,size,rb) ->
 	    let lty = fullType ty in
 	    let llb = string_mcode lb in
@@ -1270,7 +1373,7 @@ let rebuilder
 	| Ast.EnumDef(ty,lb,ids,rb) ->
 	    let lty = fullType ty in
 	    let llb = string_mcode lb in
-	    let lids = expression_dots ids in
+	    let lids = enum_decl_dots ids in
 	    let lrb = string_mcode rb in
 	    Ast.EnumDef (lty, llb, lids, lrb)
 	| Ast.StructUnionName(kind,name) ->
@@ -1296,6 +1399,7 @@ let rebuilder
 	    let lrp = string_mcode rp in
 	    Ast.TypeOfType(ltf, llp, lty, lrp)
 	| Ast.TypeName(name) -> Ast.TypeName(string_mcode name)
+	| Ast.AutoType(auto) -> Ast.AutoType(string_mcode auto)
 	| Ast.MetaType(name,cstr,keep,inherited) ->
 	    Ast.MetaType(meta_mcode name,cstr,keep,inherited)) in
     tyfn all_functions k ty
@@ -1314,7 +1418,7 @@ let rebuilder
 	    let lstg = get_option storage_mcode stg in
 	    let lty = fullType ty in
 	    let lid = ident id in
-	    let lattr = List.map string_mcode attr in
+	    let lattr = List.map attribute attr in
 	    let leq = string_mcode eq in
 	    let lini = initialiser ini in
 	    let lsem = string_mcode sem in
@@ -1323,7 +1427,7 @@ let rebuilder
 	    let lstg = get_option storage_mcode stg in
 	    let lty = fullType ty in
 	    let lid = ident id in
-	    let lattr = List.map string_mcode attr in
+	    let lattr = List.map attribute attr in
 	    let lsem = string_mcode sem in
 	    Ast.UnInit(lstg, lty, lid, lattr, lsem)
 	| Ast.FunProto(fi,name,lp,params,va,rp,sem) ->
@@ -1338,14 +1442,15 @@ let rebuilder
 	    let lrp = string_mcode rp in
 	    let lsem = string_mcode sem in
 	    Ast.FunProto(lfi,lname,llp,lparams,lva,lrp,lsem)
-	| Ast.MacroDecl(stg,name,lp,args,rp,sem) ->
+	| Ast.MacroDecl(stg,name,lp,args,rp,attr,sem) ->
 	    let lstg = get_option storage_mcode stg in
 	    let lname = ident name in
 	    let llp = string_mcode lp in
 	    let largs = expression_dots args in
 	    let lrp = string_mcode rp in
+	    let lattr = List.map attribute attr in
 	    let lsem = string_mcode sem in
-	    Ast.MacroDecl(lstg, lname, llp, largs, lrp, lsem)
+	    Ast.MacroDecl(lstg, lname, llp, largs, lrp, lattr, lsem)
 	| Ast.MacroDeclInit(stg,name,lp,args,rp,eq,ini,sem) ->
 	    let lstg = get_option storage_mcode stg in
 	    let lname = ident name in
@@ -1356,10 +1461,11 @@ let rebuilder
 	    let lini = initialiser ini in
 	    let lsem = string_mcode sem in
 	    Ast.MacroDeclInit(lstg, lname, llp, largs, lrp, leq, lini, lsem)
-	| Ast.TyDecl(ty,sem) ->
+	| Ast.TyDecl(ty,attr,sem) ->
 	    let lty = fullType ty in
+	    let lattr = List.map attribute attr in
 	    let lsem = string_mcode sem in
-	    Ast.TyDecl(lty, lsem)
+	    Ast.TyDecl(lty, lattr, lsem)
 	| Ast.Typedef(stg,ty,id,sem) ->
 	    let lstg = string_mcode stg in
 	    let lty = fullType ty in
@@ -1397,10 +1503,7 @@ let rebuilder
 	      (lc, le) in
 	    let lbf = Common.map_option bitfield bf in
 	    let lsem = string_mcode sem in
-	    Ast.Field(lty, lid, lbf, lsem)
-	| Ast.DisjField(decls) -> Ast.DisjField(List.map field decls)
-	| Ast.ConjField(decls) -> Ast.ConjField(List.map field decls)
-	| Ast.OptField(decl) -> Ast.OptField(field decl)) in
+	    Ast.Field(lty, lid, lbf, lsem)) in
     fieldfn all_functions k d
 
   and annotated_field d =
@@ -1412,8 +1515,34 @@ let rebuilder
 	| Ast.Fdots(dots,whncode) ->
 	    let ldots = string_mcode dots in
 	    let lwhncode = get_option field whncode in
-	    Ast.Fdots(ldots, lwhncode)) in
+	    Ast.Fdots(ldots, lwhncode)
+	| Ast.DisjField(decls) ->
+	    Ast.DisjField(List.map annotated_field decls)
+	| Ast.ConjField(decls) ->
+	    Ast.ConjField(List.map annotated_field decls)
+	| Ast.OptField(decl) -> Ast.OptField(annotated_field decl)) in
     annotated_fieldfn all_functions k d
+
+  and enum_decl d =
+    let k d =
+      Ast.rewrap d
+        (match Ast.unwrap d with
+         Ast.Enum(name,enum_val) ->
+            let lname = ident name in
+            (match enum_val with
+              None -> Ast.Enum(lname,None)
+            | Some(eq,eval) ->
+                let leq = string_mcode eq in
+                let leval = expression eval in
+                Ast.Enum(lname,Some(leq,leval)))
+        | Ast.EnumComma(cm) ->
+          let lcm = string_mcode cm in
+          Ast.EnumComma(lcm)
+	| Ast.EnumDots(dots,whncode) ->
+	  let ldots = string_mcode dots in
+	  let lwhncode = get_option enum_decl whncode in
+	  Ast.EnumDots(ldots, lwhncode)) in
+    enum_declfn all_functions k d
 
   and initialiser i =
     let k i =
@@ -1480,8 +1609,11 @@ let rebuilder
     let k p =
       Ast.rewrap p
 	(match Ast.unwrap p with
-	  Ast.VoidParam(ty) -> Ast.VoidParam(fullType ty)
-	| Ast.Param(ty,id) -> Ast.Param(fullType ty, get_option ident id)
+	  Ast.VoidParam(ty,attr) ->
+            Ast.VoidParam(fullType ty,List.map attribute attr)
+	| Ast.Param(ty,id,attr) ->
+            Ast.Param
+              (fullType ty, get_option ident id,List.map attribute attr)
 	| Ast.MetaParam(name,constraints,keep,inherited) ->
 	    Ast.MetaParam(meta_mcode name,constraints,keep,inherited)
 	| Ast.MetaParamList(name,lenname_inh,constraints,keep,inherited) ->
@@ -1782,7 +1914,16 @@ let rebuilder
       Ast.FStorage(stg) -> Ast.FStorage(storage_mcode stg)
     | Ast.FType(ty) -> Ast.FType(fullType ty)
     | Ast.FInline(inline) -> Ast.FInline(string_mcode inline)
-    | Ast.FAttr(attr) -> Ast.FAttr(string_mcode attr)
+    | Ast.FAttr(attr) -> Ast.FAttr(attribute attr)
+
+  and attribute a =
+    let k a =
+      Ast.rewrap a
+        (match Ast.unwrap a with
+          Ast.Attribute(attr) -> Ast.Attribute(string_mcode attr)
+	| Ast.MetaAttribute(name,constraints,keep,inherited) ->
+	    Ast.MetaAttribute(meta_mcode name,constraints,keep,inherited)) in
+    attributefn all_functions k a
 
   and whencode notfn alwaysfn = function
       Ast.WhenNot a -> Ast.WhenNot (notfn a)
@@ -1845,6 +1986,7 @@ let rebuilder
       | Ast.InitTag(decl) -> Ast.InitTag(initialiser decl)
       | Ast.DeclarationTag(decl) -> Ast.DeclarationTag(declaration decl)
       | Ast.FieldTag(decl) -> Ast.FieldTag(field decl)
+      | Ast.EnumDeclTag(decl) -> Ast.EnumDeclTag(enum_decl decl)
       | Ast.StorageTag(stg) as x -> x
       | Ast.IncFileTag(stg) as x -> x
       | Ast.Rule_elemTag(rule) -> Ast.Rule_elemTag(rule_elem rule)
@@ -1853,6 +1995,7 @@ let rebuilder
       | Ast.CaseLineTag(case) -> Ast.CaseLineTag(case_line case)
       | Ast.StringFragmentTag(frag) ->
 	  Ast.StringFragmentTag(string_fragment frag)
+      | Ast.AttributeTag(attr) -> Ast.AttributeTag(attribute attr)
       | Ast.ConstVolTag(cv) as x -> x
       | Ast.Token(tok,info) as x -> x
       | Ast.Directive(str) as x -> x
@@ -1862,6 +2005,7 @@ let rebuilder
       | Ast.StmtDotsTag(sd) -> Ast.StmtDotsTag(statement_dots sd)
       | Ast.AnnDeclDotsTag(sd) -> Ast.AnnDeclDotsTag(annotated_decl_dots sd)
       | Ast.AnnFieldDotsTag(sd) -> Ast.AnnFieldDotsTag(annotated_field_dots sd)
+      | Ast.EnumDeclDotsTag(sd) -> Ast.EnumDeclDotsTag(enum_decl_dots sd)
       | Ast.DefParDotsTag(sd) -> Ast.DefParDotsTag(define_param_dots sd)
       | Ast.TypeCTag(ty) -> Ast.TypeCTag(typeC ty)
       | Ast.ParamTag(param) -> Ast.ParamTag(parameterTypeDef param)
@@ -1880,17 +2024,21 @@ let rebuilder
       rebuilder_typeC = typeC;
       rebuilder_declaration = declaration;
       rebuilder_field = field;
+      rebuilder_ann_field = annotated_field;
+      rebuilder_enumdecl = enum_decl;
       rebuilder_initialiser = initialiser;
       rebuilder_parameter = parameterTypeDef;
       rebuilder_parameter_list = parameter_dots;
       rebuilder_rule_elem = rule_elem;
       rebuilder_statement = statement;
       rebuilder_case_line = case_line;
+      rebuilder_attribute = attribute;
       rebuilder_top_level = top_level;
       rebuilder_expression_dots = expression_dots;
       rebuilder_statement_dots = statement_dots;
       rebuilder_anndecl_dots = annotated_decl_dots;
       rebuilder_annfield_dots = annotated_field_dots;
+      rebuilder_enumdecl_dots = enum_decl_dots;
       rebuilder_initialiser_dots = initialiser_dots;
       rebuilder_define_param_dots = define_param_dots;
       rebuilder_define_param = define_param;

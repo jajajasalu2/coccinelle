@@ -145,7 +145,21 @@ let keyword_table = Common.hash_of_list [
   "unsigned", (fun ii -> Tunsigned ii);
   "signed",   (fun ii -> Tsigned ii);
 
-  "auto",     (fun ii -> Tauto ii);
+  "auto",     (fun ii ->
+                let open Flag in
+                match !c_plus_plus with
+                  On None ->
+                    let i = Ast_c.parse_info_of_info ii in
+                    raise
+                      (Semantic_c.Semantic
+                        ("auto has different meaning in different versions of \
+                          C++. Please specify a version using --c++=<version>",
+                        i))
+                | On (Some i) ->
+                    if i >= 2011
+                    then TautoType ii
+                    else Tauto ii
+                | Off -> Tauto ii);
   "register", (fun ii -> Tregister ii);
   "extern",   (fun ii -> Textern ii);
   "static",   (fun ii -> Tstatic ii);
@@ -639,7 +653,9 @@ rule token = parse
         then TIfdefBool (false, no_ifdef_mark(), info)
         else if List.mem str_guard !Flag_parsing_c.defined
         then TIfdefBool (true, no_ifdef_mark(), info)
-        else TIfdef (Gif_str str_guard, no_ifdef_mark(), info)
+        else
+	  let pos = lexbuf.Lexing.lex_start_p in
+	  TIfdef (Gif_str (pos, str_guard), no_ifdef_mark(), info)
       }
   | "#" [' ' '\t']* "if" '('
       { let info = tokinfo lexbuf in
@@ -651,12 +667,15 @@ rule token = parse
         then TIfdefBool (false, no_ifdef_mark(), info)
         else if List.mem test_str_guard !Flag_parsing_c.defined
         then TIfdefBool (true, no_ifdef_mark(), info)
-        else TIfdef (Gif_str str_guard, no_ifdef_mark(), info)
+        else
+	  let pos = lexbuf.Lexing.lex_start_p in
+	  TIfdef (Gif_str (pos, str_guard), no_ifdef_mark(), info)
       }
   | "#" [' ' '\t']* "elif" [' ' '\t']+
       { let info = tokinfo lexbuf in
         let str_guard = cpp_eat_until_nl lexbuf in
-        TIfdefelif (Gif_str str_guard,
+	let pos = lexbuf.Lexing.lex_start_p in
+        TIfdefelif (Gif_str (pos, str_guard),
                     no_ifdef_mark(),
                     info +> tok_add_s str_guard
                    )
@@ -810,7 +829,7 @@ rule token = parse
         let s = tok lexbuf in
         Common.profile_code "C parsing.lex_ident" (fun () ->
 	  let tok =
-	    if !Flag.c_plus_plus
+	    if !Flag.c_plus_plus <> Flag.Off
 	    then Common.optionise (fun () -> Hashtbl.find cpp_keyword_table s)
 	    else None in
 	  match tok with
@@ -841,7 +860,20 @@ rule token = parse
             * now done in parse_c.ml.
             *)
 
-		  | None -> TIdent (s, info)
+		  | None ->
+		      (* get information from the semantic patch *)
+		      (* typedef is not done due to tyex.cocci *)
+		      (* attributes not done due to roa; don't know
+			 whether to use MacroAttr or MacroEndAttr *)
+		      (*if List.mem s !Data.type_names
+		      then TypedefIdent (s, info)
+		      else if List.mem s !Data.attr_names
+		      then TMacroAttr (s, info)
+		      else*) if List.mem s !Data.declarer_names
+		      then TMacroDecl (s, info)
+		      else if List.mem s !Data.iterator_names
+		      then TMacroIterator (s, info)
+		      else TIdent (s, info)
         )
       }
   (* gccext: apparently gcc allows dollar in variable names. found such
@@ -872,7 +904,7 @@ rule token = parse
       {
         let info = tokinfo lexbuf in
         let s = tok lexbuf in
-        if !Flag.c_plus_plus
+        if !Flag.c_plus_plus <> Flag.Off
 	then Tconstructorname (s, info)
 	else
 	  begin
@@ -887,7 +919,7 @@ rule token = parse
       {
         let info = tokinfo lexbuf in
         let s = tok lexbuf in
-        if !Flag.c_plus_plus
+        if !Flag.c_plus_plus <> Flag.Off
 	then TypedefIdent (s, info)
 	else
 	  begin
@@ -910,7 +942,7 @@ rule token = parse
       {
         let info = tokinfo lexbuf in
         let s = tok lexbuf in
-        if !Flag.c_plus_plus
+        if !Flag.c_plus_plus <> Flag.Off
 	then
 	  begin
 	    if first = second
@@ -934,7 +966,7 @@ rule token = parse
       {
         let info = tokinfo lexbuf in
         let s = tok lexbuf in
-        (if not !Flag.c_plus_plus
+        (if !Flag.c_plus_plus = Flag.Off
 	then
 	  pr2_once "~ and :: not allowed in C identifiers, try -c++ option");
 	TIdent (s, info)
@@ -964,6 +996,31 @@ rule token = parse
       { let info = tokinfo lexbuf in
         let s = string lexbuf in
         TString   ((s,   IsWchar),  (info +> tok_add_s (s ^ "\"")))
+      }
+  | 'U' "'"
+      { let info = tokinfo lexbuf in
+        let s = char lexbuf   in
+        TChar     ((s,   IsUchar),  (info +> tok_add_s (s ^ "'")))
+      }
+  | 'U' '\"'
+      { let info = tokinfo lexbuf in
+        let s = string lexbuf in
+        TString   ((s,   IsUchar),  (info +> tok_add_s (s ^ "\"")))
+      }
+  | 'u' "'"
+      { let info = tokinfo lexbuf in
+        let s = char lexbuf   in
+        TChar     ((s,   Isuchar),  (info +> tok_add_s (s ^ "'")))
+      }
+  | 'u' '\"'
+      { let info = tokinfo lexbuf in
+        let s = string lexbuf in
+        TString   ((s,   Isuchar),  (info +> tok_add_s (s ^ "\"")))
+      }
+  | "u8" '\"'
+      { let info = tokinfo lexbuf in
+        let s = string lexbuf in
+        TString   ((s,   Isu8char),  (info +> tok_add_s (s ^ "\"")))
       }
 
 

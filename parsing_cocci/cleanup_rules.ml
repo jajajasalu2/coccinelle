@@ -198,6 +198,10 @@ let field r k d =
       then set_failed !drop_stack);
       listlen len;
       k d
+  | _ -> k d
+
+let ann_field r k d =
+  match Ast.unwrap d with
   | Ast.DisjField(decls) ->
       run_loop k decls (fun x -> x) (fun x -> Ast.rewrap d (Ast.DisjField x))
   | Ast.OptField(decl) -> d
@@ -240,16 +244,25 @@ let statement r k s =
   | Ast.OptStm(_) -> s
   | _ -> k s
 
+let attribute r k a =
+  match Ast.unwrap a with
+    Ast.MetaAttribute(name,_,_,_) ->
+      (if List.mem (get_rule name) !dropped
+      then set_failed !drop_stack);
+      k a
+  | _ -> k a
+
 let do_cleanup =
   let donothing r k e = k e in
   V.rebuilder
     mcode mcode mcode mcode mcode mcode mcode mcode mcode
     mcode mcode mcode mcode mcode
-    donothing donothing donothing donothing donothing donothing (* dots *)
+    donothing donothing donothing donothing donothing
+    donothing donothing (* dots *)
     ident expression string_fragment string_format assignOp
     binaryOp fullType typeC initialiser parameterTypeDef define_param
-    declaration donothing field donothing
-    rule_elem statement donothing donothing donothing
+    declaration donothing field ann_field donothing
+    rule_elem statement donothing attribute donothing donothing
 
 let cleanup_rules rules d =
   dropped := d;

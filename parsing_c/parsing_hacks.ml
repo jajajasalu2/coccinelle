@@ -61,7 +61,7 @@ let is_known_typdef =
       | "u_char"   | "u_short"  | "u_int"  | "u_long"
       | "u8" | "u16" | "u32" | "u64"
       | "s8"  | "s16" | "s32" | "s64"
-      | "__u8" | "__u16" | "__u32"  | "__u64"
+      | "__u8" | "__u16" | "__u32"  | "__u64" | "bool"
         -> true
 
       | "acpi_handle"
@@ -1201,7 +1201,7 @@ let rec find_macro_paren xs =
 
   (* string macro variable, before case *)
   | PToken ({tok = (TString _ | TMacroString _)})::PToken ({tok = TIdent (s,_)} as id)
-      ::xs when not !Flag.c_plus_plus ->
+      ::xs when !Flag.c_plus_plus = Flag.Off ->
 
       msg_stringification s;
       id.tok <- TMacroString (s, TH.info_of_tok id.tok);
@@ -1450,7 +1450,7 @@ let rec find_macro_lineparen prev_line_end xs =
    *)
   | (Line
         ([PToken ({tok = TIdent (s,ii); col = col1; where = ctx} as macro);
-          Parenthised (xxs,info_parens);
+          (Parenthised (xxs,info_parens) as args);
         ] as _line1
         ))
     ::(Line
@@ -1505,12 +1505,29 @@ let rec find_macro_lineparen prev_line_end xs =
           msg_macro_noptvirg s;
 	  (match ctx with
 	    InStruct ->
-              macro.tok <- TMacroDecl (s, TH.info_of_tok macro.tok)
+              macro.tok <- TMacroDecl (s, TH.info_of_tok macro.tok);
+              [args] +>
+              iter_token_paren (TV.set_as_comment Token_c.CppMacro)
 	  | InFunction | NoContext ->
-              macro.tok <- TMacroStmt (s, TH.info_of_tok macro.tok)
+	      let contains_semicolon data =
+		let res = ref false in
+		iter_token_paren
+		  (function t ->
+		    match t.tok with
+		      TPtVirg _ -> res := true
+		    | _ -> ())
+		  data;
+		!res in
+	      if contains_semicolon [args]
+	      then
+		begin
+		  macro.tok <- TMacroIdStmt (s, TH.info_of_tok macro.tok);
+		  [args] +>
+		  iter_token_paren (TV.set_as_comment Token_c.CppMacro)
+		end
+              else macro.tok <- TMacroStmt (s, TH.info_of_tok macro.tok)
 	  | _ -> failwith "macro: not possible");
-          [Parenthised (xxs, info_parens)] +>
-            iter_token_paren (TV.set_as_comment Token_c.CppMacro);
+
         end;
 
       find_macro_lineparen true (line2::xs)
@@ -1557,7 +1574,7 @@ let rec find_macro_lineparen prev_line_end xs =
       if condition
       then begin
         msg_macro_noptvirg_single s;
-        macro.tok <- TMacroStmt (s, TH.info_of_tok macro.tok);
+        macro.tok <- TMacroIdStmt (s, TH.info_of_tok macro.tok);
       end;
       find_macro_lineparen true (line2::xs)
 
@@ -1887,6 +1904,11 @@ let not_struct_enum = function
     (Parser_c.Tstruct _ | Parser_c.Tunion _ | Parser_c.Tenum _)::_ -> false
   | _ -> true
 
+let is_struct_enum = function
+  | (Parser_c.TIdent _)::
+    (Parser_c.Tstruct _ | Parser_c.Tunion _ | Parser_c.Tenum _)::_ -> true
+  | _ -> false
+
 let not_opar = function
     TOPar _ -> false
   | _ -> true
@@ -1900,16 +1922,18 @@ let pointer ?(followed_by=fun _ -> true)
   let rec loop ts =
     match ts with
     | TMul _ :: rest -> loop rest
-    | TAnd _ :: rest when !Flag.c_plus_plus -> loop rest
+    | TAnd _ :: rest when !Flag.c_plus_plus <> Flag.Off -> loop rest
     | t :: ts' -> followed_by t && followed_by_more ts'
     | [] -> failwith "unexpected end of token stream" in
   match ts with
   | TMul _ :: rest -> loop rest
-  | TAnd _ :: rest when !Flag.c_plus_plus -> loop rest
+  | TAnd _ :: rest when !Flag.c_plus_plus <> Flag.Off -> loop rest
   | _ -> false
 
 let ident = function
     TIdent _ -> true
+  | TMacroStmt _ -> true
+  | TMacroIdStmt _ -> true
   | _ -> false
 
 let is_type = function
@@ -1926,6 +1950,29 @@ let is_type = function
   | Tint _
   | Tlong _
   | Tshort _ -> true
+  | _ -> false
+
+let is_type_qualif = function
+  | Tconst _
+  | Tvolatile _ -> true
+  | _ -> false
+
+let is_storage_spec = function
+  | Tstatic _
+  | Tregister _
+  | Textern _
+  | Tauto _ -> true
+  | _ -> false
+
+let rec is_idents ?(followed_by=fun _ -> true) ts =
+  let rec loop l =
+    match l with
+    | x::xs when ident x -> loop xs
+    | x::xs -> followed_by x
+    | [] -> failwith "unexpected end of token stream" in
+  match ts with
+  | x::xs when ident x -> loop xs
+  | x::xs -> followed_by x
   | _ -> false
 
 let is_cparen = function (TCPar _) -> true | _ -> false
@@ -1979,17 +2026,17 @@ let lookahead2 ~pass next before =
   (* c++ hacks *)
   (* yy xx(   and in function *)
   | TOPar i1::_,              TIdent(s,i2)::TypedefIdent _::_
-      when !Flag.c_plus_plus && (LP.current_context () = (LP.InFunction)) ->
+      when !Flag.c_plus_plus <> Flag.Off && (LP.current_context () = (LP.InFunction)) ->
         pr2_cpp("constructed_object: "  ^s);
         TOParCplusplusInit i1
   | TOPar i1::_,              TIdent(s,i2)::ptr
-      when !Flag.c_plus_plus
+      when !Flag.c_plus_plus <> Flag.Off
 	  && pointer ~followed_by:(function TypedefIdent _ -> true | _ -> false) ptr
 	  && (LP.current_context () = (LP.InFunction)) ->
         pr2_cpp("constructed_object: "  ^s);
         TOParCplusplusInit i1
   | TypedefIdent(s,i)::TOPar i1::_,_
-      when !Flag.c_plus_plus && (LP.current_context () = (LP.InFunction)) ->
+      when !Flag.c_plus_plus <> Flag.Off && (LP.current_context () = (LP.InFunction)) ->
 	TIdent(s,i)
 
   (*-------------------------------------------------------------*)
@@ -2019,21 +2066,21 @@ let lookahead2 ~pass next before =
 
 	(* delete[] *)
   | (TOCro i1 :: _, Tdelete _ :: _)
-    when !Flag.c_plus_plus ->
+    when !Flag.c_plus_plus <> Flag.Off ->
       TCommentCpp (Token_c.CppDirective, i1)
 	(* delete[] *)
   | (TCCro i1 :: _, Tdelete _ :: _)
-    when !Flag.c_plus_plus ->
+    when !Flag.c_plus_plus <> Flag.Off ->
       TCommentCpp (Token_c.CppDirective, i1)
 
 	(* extern "_" tt *)
   | ((TString ((s, _), i1) | TMacroString (s, i1)) :: _ , Textern _ :: _)
-    when !Flag.c_plus_plus ->
+    when !Flag.c_plus_plus <> Flag.Off ->
 	  TCommentCpp (Token_c.CppDirective, i1)
 
 	(* ) const { *)
   | (Tconst i1 :: TOBrace _ :: _ , TCPar _ :: _)
-    when !Flag.c_plus_plus ->
+    when !Flag.c_plus_plus <> Flag.Off ->
 	  TCommentCpp (Token_c.CppDirective, i1)
 
   (* const ident const: ident must be a type *)
@@ -2061,6 +2108,46 @@ let lookahead2 ~pass next before =
 	&& is_type type_ ->
 	  TCommentCpp (Token_c.CppDirective, i1)
 
+        (* tt xx yy ( : xx is an annot *)
+  | (TIdent (s, i1)::TIdent (s2, i2)::TOPar _::_, seen::_)
+    when LP.current_context () = LP.InTopLevel
+	&& (is_struct_enum before || is_type seen)
+	&& s ==~ regexp_annot ->
+	  TCommentCpp (Token_c.CppMacro, i1)
+
+        (* tt * xx yy ( : xx is an annot *)
+  | (TIdent (s, i1)::TIdent (s2, i2)::TOPar _::_, ptr)
+    when LP.current_context () = LP.InTopLevel
+	&& pointer ptr
+	&& s ==~ regexp_annot ->
+	  TCommentCpp (Token_c.CppMacro, i1)
+
+	(* tt xx yy; : yy is an annot *)
+  | (TIdent (s, i1)::(TPtVirg _|TEq _)::_, TIdent (s2, i2)::type_::rest)
+    when (is_struct_enum (type_::rest)
+	|| is_type type_)
+	&& s ==~ regexp_annot ->
+	  TCommentCpp (Token_c.CppMacro, i1)
+
+	(* tt * xx yy; : yy is an annot *)
+  | (TIdent (s, i1)::(TPtVirg _|TEq _)::_, TIdent (s2, i2)::ptr)
+    when pointer ptr
+	&& s ==~ regexp_annot ->
+	  TCommentCpp (Token_c.CppMacro, i1)
+
+	(* tt xx yy; : yy is an annot, so xx is an ident *)
+  | (TIdent (s, i1)::TIdent (s2, i2)::(TPtVirg _|TEq _)::_, seen::_)
+    when (is_struct_enum before
+	|| is_type seen)
+	&& s2 ==~ regexp_annot ->
+	  TIdent (s, i1)
+
+	(* tt * xx yy; : yy is an annot, so xx is an ident *)
+  | (TIdent (s, i1)::TIdent (s2, i2)::(TPtVirg _|TEq _)::_, ptr)
+    when pointer ptr
+	&& s2 ==~ regexp_annot ->
+	  TIdent (s, i1)
+
 	(* tt xx yy *)
   | (TIdent (s, i1)::TIdent (s2, i2)::_  , seen::_)
     when not_struct_enum before
@@ -2069,6 +2156,16 @@ let lookahead2 ~pass next before =
 	    TIdent (s, i1)
 	  else
 	    TCommentCpp (Token_c.CppDirective, i1)
+
+	(* tt xx yy *)
+  | (TIdent (s, i1)::rest, _)
+    when not_struct_enum before
+	&& is_idents
+           ~followed_by:
+             (function x ->
+                is_type x || is_storage_spec x || is_type_qualif x) rest
+        && s ==~ regexp_annot ->
+	    TCommentCpp (Token_c.CppMacro, i1)
 
   | (TIdent (s2, i2)::_  , TIdent (s, i1)::seen::_)
     when not_struct_enum before
@@ -2120,6 +2217,41 @@ let lookahead2 ~pass next before =
       && ok_typedef s && is_macro s2 && is_type type_
         ->
 	  TIdent (s, i1)
+
+  (* xx yy zz : xx is a macro *)
+  | (TIdent (s, i1)::TIdent (s2, i2)::TIdent(_,_)::_ , _)
+    when not_struct_enum before
+	&& ok_typedef s2
+	&& is_known_typdef s2
+        ->
+	  TCommentCpp(Token_c.CppMacro, i1)
+
+  (* xx yy zz : xx is a typedef ident *)
+  | (TIdent (s, i1)::TIdent (s2, i2)::TIdent(_,_)::_ , _)
+    when not_struct_enum before
+	&& ok_typedef s
+        ->
+      msg_typedef s i1 2; LP.add_typedef_root s i1;
+      TypedefIdent (s, i1)
+
+  (* xx yy * zz : xx is a macro *)
+  | (TIdent (s, i1)::TIdent (s2, i2)::ptr , _)
+    when pointer ~followed_by:(function TIdent _ -> true | _ -> false) ptr
+	&& not_struct_enum before
+	&& ok_typedef s2
+	&& is_known_typdef s2
+        ->
+	  TCommentCpp(Token_c.CppMacro, i1)
+
+  (* xx yy * zz : xx is a typedef ident *)
+  | (TIdent (s, i1)::TIdent (s2, i2)::ptr , _)
+    when pointer ~followed_by:(function TIdent _ -> true | _ -> false) ptr
+	&& not_struct_enum before
+	&& ok_typedef s
+        ->
+      msg_typedef s i1 2; LP.add_typedef_root s i1;
+      TypedefIdent (s, i1)
+
   (* xx yy *)
   | (TIdent (s, i1)::TIdent (s2, i2)::rest  , _) when not_struct_enum before
 	&& ok_typedef s && not (is_macro_paren s2 rest)
@@ -2671,6 +2803,10 @@ let lookahead2 ~pass next before =
 	s1 ==~ regexp_annot ->
 	  msg_attribute s1;
 	  TMacroAttr (s1, i1)
+
+  | (TMacroAttr(s1,i1)::(TPtVirg(ii2)|TEq(ii2))::rest,_)
+      ->
+	  TMacroEndAttr (s1, i1)
 
 (*  (* christia: here insert support for macros on top level *)
   | TIdent (s, ii) :: tl :: _, _ when

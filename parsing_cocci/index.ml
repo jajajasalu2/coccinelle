@@ -5,8 +5,8 @@
  *)
 
 (* create an index for each constructor *)
-(* current max is 188, also unused: 8-9, 15, 39, 40, 42, 46, 57, 65, 85-86,
- 113-115, 138-140, 162 *)
+(* current max is 192, also unused: 8-9, 15, 42, 46, 57, 65, 85-86,
+ 113-115, 140, 162 *)
 
 (* doesn't really work - requires that identical terms with no token
 subterms (eg dots) not appear on the same line *)
@@ -28,6 +28,7 @@ let parameter_dots x =   3 :: dots x
 let statement_dots x =   4 :: dots x
 let declaration_dots x = 5 :: dots x
 let field_dots x = 8 :: dots x
+let enum_decl_dots x = 9 :: dots x
 let case_line_dots x =   6 :: dots x
 let define_param_dots x =7 :: dots x
 
@@ -46,7 +47,7 @@ let expression e =
   match Ast0.unwrap e with
     Ast0.Ident(id) -> [17]
   | Ast0.Constant(const) -> [18]
-  | Ast0.StringConstant(lq,str,rq) -> [165]
+  | Ast0.StringConstant(lq,str,rq,sz) -> [165]
   | Ast0.FunCall(fn,lp,args,rp) -> [19]
   | Ast0.Assignment(left,op,right,simple) -> [20]
   | Ast0.Sequence(left,op,right) -> [156]
@@ -60,7 +61,7 @@ let expression e =
   | Ast0.ArrayAccess(exp1,lb,exp2,rb) -> [27]
   | Ast0.RecordAccess(exp,pt,field) -> [28]
   | Ast0.RecordPtAccess(exp,ar,field) -> [29]
-  | Ast0.Cast(lp,ty,rp,exp) -> [30]
+  | Ast0.Cast(lp,ty,attr,rp,exp) -> [30]
   | Ast0.SizeOfExpr(szf,exp) -> [98] (* added after *)
   | Ast0.SizeOfType(szf,lp,ty,rp) -> [99] (* added after *)
   | Ast0.TypeExp(ty) -> [123] (* added after *)
@@ -92,7 +93,8 @@ let typeC t =
   | Ast0.BaseType(ty,strings) -> [48]
   | Ast0.Signed(sign,ty) -> [129]
   | Ast0.Pointer(ty,star) -> [49]
-  | Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) -> [131]
+  | Ast0.ParenType(lp,ty,rp) -> [138]
+  | Ast0.FunctionType(ty,lp,params,rp) -> [139]
   | Ast0.Array(ty,lb,size,rb) -> [50]
   | Ast0.Decimal(dec,lp,length,comma,precision_opt,rp) -> [160]
   | Ast0.EnumName(kind,name) -> [146]
@@ -102,6 +104,7 @@ let typeC t =
   | Ast0.TypeOfExpr(tf,lp,exp,rp) -> [135]
   | Ast0.TypeOfType(tf,lp,ty,rp) -> [136]
   | Ast0.TypeName(name) -> [52]
+  | Ast0.AutoType _ -> [192]
   | Ast0.MetaType(name,_,_) -> [53]
   | Ast0.DisjType(_,type_list,_,_) -> [130]
   | Ast0.ConjType(_,type_list,_,_) -> [134]
@@ -114,9 +117,9 @@ let declaration d =
   | Ast0.Init(stg,ty,id,attr,eq,exp,sem) -> [54]
   | Ast0.UnInit(stg,ty,id,attr,sem) -> [55]
   | Ast0.FunProto(fi,name,lp1,params,va,rp1,sem) -> [132]
-  | Ast0.MacroDecl(stg,name,lp,args,rp,sem) -> [137]
+  | Ast0.MacroDecl(stg,name,lp,args,rp,attr,sem) -> [137]
   | Ast0.MacroDeclInit(stg,name,lp,args,rp,eq,ini,sem) -> [157]
-  | Ast0.TyDecl(ty,sem) -> [116]
+  | Ast0.TyDecl(ty,attr,sem) -> [116]
   | Ast0.Typedef(stg,ty,id,sem) -> [143]
   | Ast0.DisjDecl(_,decls,_,_) -> [97] (* added after *)
   | Ast0.ConjDecl(_,decls,_,_) -> [88] (* added after *)
@@ -133,6 +136,12 @@ let field d =
   | Ast0.Fdots(dots,whencode) -> [133]
   | Ast0.OptField(decl) -> [191]
 
+let enum_decl d =
+  match Ast0.unwrap d with
+  | Ast0.Enum(name,enum_val) -> [113]
+  | Ast0.EnumComma(cm) -> [114]
+  | Ast0.EnumDots(dots,whencode) -> [115]
+
 let initialiser i =
   match Ast0.unwrap i with
     Ast0.MetaInit(nm,_,_) -> [106] (* added after *)
@@ -148,8 +157,8 @@ let initialiser i =
 
 let parameterTypeDef p =
   match Ast0.unwrap p with
-    Ast0.VoidParam(ty) -> [59]
-  | Ast0.Param(ty,id) -> [60]
+    Ast0.VoidParam(ty,attr) -> [59]
+  | Ast0.Param(ty,id,attr) -> [60]
   | Ast0.MetaParam(name,_,_) -> [61]
   | Ast0.MetaParamList(name,_,_,_) -> [62]
   | Ast0.PComma(cm) -> [63]
@@ -219,6 +228,11 @@ let string_fragment f =
   | Ast0.FormatFragment(pct,fmt) -> [167]
   | Ast0.Strdots(dots) -> [168]
   | Ast0.MetaFormatList(pct,name,cstr,lenname) -> [169]
+
+let attribute a =
+  match Ast0.unwrap a with
+    Ast0.Attribute(attr) -> [39]
+  | Ast0.MetaAttribute(name,_,_) -> [40]
 
 let top_level t =
   match Ast0.unwrap t with

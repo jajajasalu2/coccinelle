@@ -17,6 +17,7 @@ open Common
 
 module TH = Token_helpers
 module LP = Lexer_parser
+module IC = Includes_cache
 
 module Stat = Parsing_stat
 
@@ -262,8 +263,13 @@ let time_lexing ?(profile=true) a =
   else tokens2 a
 let tokens ?profile a = time_lexing ?profile a
 
-let tokens_of_string string =
+let tokens_of_string string infos =
   let lexbuf = Lexing.from_string string in
+  (match infos with
+    None -> ()
+  | Some pos ->
+      lexbuf.Lexing.lex_abs_pos <- pos.Lexing.pos_cnum;
+      lexbuf.Lexing.lex_curr_p <- pos);
   try
     let rec tokens_s_aux () =
       let tok = Lexer_c.token lexbuf in
@@ -321,8 +327,8 @@ let fix_cpp_defined_operator =
  *     result
  *)
 
-let parse_gen ~cpp ~tos parsefunc s =
-  let toks = tokens_of_string s +> List.filter TH.is_not_comment in
+let parse_gen ~cpp ~tos parsefunc infos s =
+  let toks = tokens_of_string s infos +> List.filter TH.is_not_comment in
   let toks' =
     if cpp
     (* We have fix_tokens_define that relaces \\\n by [TCommentSpace]
@@ -334,7 +340,6 @@ let parse_gen ~cpp ~tos parsefunc s =
     then fix_cpp_defined_operator (TH.filter_out_escaped_newline toks)
     else toks
   in
-
 
   (* Why use this lexing scheme ? Why not classically give lexer func
    * to parser ? Because I now keep comments in lexer. Could
@@ -370,9 +375,11 @@ let parse_gen ~cpp ~tos parsefunc s =
   result
 
 (* Please DO NOT remove this code, even though most of it is not used *)
-let type_of_string       = parse_gen ~cpp:false ~tos:true Parser_c.type_name
-let statement_of_string  = parse_gen ~cpp:false ~tos:false Parser_c.statement
-let expression_of_string = parse_gen ~cpp:false ~tos:false Parser_c.expr
+let type_of_string s     =
+  let typname = parse_gen ~cpp:false ~tos:true Parser_c.type_name None s in
+  Common.snd typname
+let statement_of_string  = parse_gen ~cpp:false ~tos:false Parser_c.statement None
+let expression_of_string = parse_gen ~cpp:false ~tos:false Parser_c.expr None
 let cpp_expression_of_string = parse_gen ~cpp:true ~tos:false Parser_c.expr
 
 (* ex: statement_of_string "(struct us_data* )psh->hostdata = NULL;" *)
@@ -608,13 +615,15 @@ let rec lexer_function ~pass tr = fun lexbuf ->
             | x -> x
           in
 
+          let passed_before = filter_noise 10 tr.passed_clean in
+
           let v =
 	    if !in_exec
 	    then v
 	    else
 	      Parsing_hacks.lookahead ~pass
 		(clean_for_lookahead (v::tr.rest_clean))
-		tr.passed_clean in
+		passed_before in
 
           tr.passed <- v::tr.passed;
 
@@ -786,16 +795,17 @@ let find_optional_macro_to_expand ~defs pos a =
   *
   * @author Iago Abal
   *)
-let parse_ifdef_guard_visitor (parse :string -> Ast_c.expression)
+let parse_ifdef_guard_visitor
+    (parse: Lexing.position option -> string -> Ast_c.expression)
     :Visitor_c.visitor_c_s =
   let v_ifdef_guard = function
       (* Gif_str <string> --parse--> Gif <expression> *)
-    | Ast_c.Gif_str input ->
+    | Ast_c.Gif_str (pos,input) ->
         begin
-          try Ast_c.Gif (parse input) with
+          try Ast_c.Gif (parse (Some pos) input) with
           | Parsing.Parse_error ->
               pr2 ("Unable to parse #if condition: " ^ input);
-              Ast_c.Gif_str input
+              Ast_c.Gif_str (pos,input)
         end
     | x                   -> x
   in
@@ -983,21 +993,34 @@ let rec _parse_print_error_heuristic2 saved_typedefs saved_macros
         Some result
   end
 
-
 and handle_include file wrapped_incl k =
     let incl = Ast_c.unwrap wrapped_incl.Ast_c.i_include in
     let parsing_style = Includes.get_parsing_style () in
+    let f = Includes.resolve file parsing_style incl in
     if Includes.should_parse parsing_style file incl
-    then begin match Includes.resolve file parsing_style incl with
+    then
+      match f with
       | Some header_filename when Common.lfile_exists header_filename ->
-	  (if !Flag_parsing_c.verbose_includes
-	  then pr2 ("including "^header_filename));
-	  let nonlocal =
-	    match incl with Ast_c.NonLocal _ -> true | _ -> false in
-          ignore (k nonlocal header_filename)
+          if not (IC.has_been_parsed header_filename)
+          then
+            begin
+              IC.add_to_parsed_files header_filename;
+              (if !Flag_parsing_c.verbose_includes
+              then pr2 ("including "^header_filename));
+              let nonlocal =
+                match incl with Ast_c.NonLocal _ -> true | _ -> false in
+              let res = k nonlocal header_filename in
+              match res with
+                None -> ()
+              | Some x ->
+                  let pt = x.parse_trees in
+                  let (p, _, _) = pt in
+                  with_program2_unit
+                    (IC.extract_names header_filename)
+                    p
+            end;
+          IC.add_to_dependency_graph file header_filename;
       | _ -> ()
-    end
-
 
 and _parse_print_error_heuristic2bis saved_typedefs saved_macros
   parse_strings file use_header_cache =

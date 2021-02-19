@@ -202,19 +202,23 @@ let (fixDeclSpecForDecl: decl -> (fullType * (storage wrap)))  = function
 
 
 let fixDeclSpecForParam = function ({storageD = (st,iist)} as r) ->
-  let ((qu,ty) as v,_st) = fixDeclSpecForDecl r in
+  let (qu_ty,_st) = fixDeclSpecForDecl r in
   match st with
-  | (Sto Register) -> (v, true), iist
-  | NoSto -> (v, false), iist
+  | (Sto Register) -> (qu_ty, true), iist
+  | NoSto -> (qu_ty, false), iist
   | _ ->
       raise
         (Semantic ("storage class specified for parameter of function",
                   fake_pi))
 
+let fixDeclSpecForArg = function ({storageD = (st,iist)} as r) ->
+  let (qu_ty,_st) = fixDeclSpecForDecl r in
+  (qu_ty, st = Sto Register), iist
+
 let fixDeclSpecForMacro = function ({storageD = (st,iist)} as r) ->
-  let ((qu,ty) as v,_st) = fixDeclSpecForDecl r in
+  let (qu_ty,_st) = fixDeclSpecForDecl r in
   match st with
-  | NoSto -> v
+  | NoSto -> qu_ty
   | _ ->
       raise
         (Semantic ("storage class specified for macro type decl",
@@ -495,7 +499,7 @@ let postfakeInfo pii  =
 
 %token <Ast_c.info>
        Tchar Tshort Tint Tdouble Tfloat Tcomplex Tlong Tunsigned Tsigned
-       Tvoid Tsize_t Tssize_t Tptrdiff_t
+       Tvoid Tsize_t Tssize_t Tptrdiff_t TautoType
        Tauto Tregister Textern Tstatic
        Ttypedef
        Tconst Tvolatile
@@ -600,7 +604,7 @@ let postfakeInfo pii  =
 
 %token <(string * Ast_c.info)>            TMacroAttr
 %token <(string * Ast_c.info)>            TMacroEndAttr
-%token <(string * Ast_c.info)>            TMacroStmt
+%token <(string * Ast_c.info)>            TMacroStmt TMacroIdStmt
 %token <(string * Ast_c.info)> TMacroIdentBuilder
 /*(* no need value for the moment *)*/
 %token <(string * Ast_c.info)>            TMacroString
@@ -665,7 +669,7 @@ let postfakeInfo pii  =
 
 %type <Ast_c.statement> statement
 %type <Ast_c.expression> expr
-%type <Ast_c.fullType> type_name
+%type <Ast_c.attribute list * Ast_c.fullType> type_name
 
 %%
 /*(*************************************************************************)*/
@@ -818,7 +822,8 @@ arith_expr:
 
 cast_expr:
  | unary_expr                        { $1 }
- | topar2 type_name tcpar2 cast_expr { mk_e(Cast ($2, $4)) [$1;$3] }
+ | topar2 type_name tcpar2 cast_expr
+   { mk_e(Cast (snd $2, fst $2, $4)) [$1;$3] }
 /*
 It could be useful to have the following, but there is no place for the
 attribute in the AST.
@@ -831,7 +836,11 @@ unary_expr:
  | TDec unary_expr                 { mk_e(Infix ($2, Dec))    [$1] }
  | unary_op cast_expr              { mk_e(Unary ($2, fst $1)) [snd $1] }
  | Tsizeof unary_expr              { mk_e(SizeOfExpr ($2))    [$1] }
- | Tsizeof topar2 type_name tcpar2 { mk_e(SizeOfType ($3))    [$1;$2;$4] }
+ | Tsizeof topar2 type_name tcpar2
+     { let ret = mk_e(SizeOfType (snd $3)) [$1;$2;$4] in
+       match (fst $3) with (* warn about dropped attributes *)
+         [] -> ret
+       | _ -> warning "attributes found in sizeof(...), dropping" ret }
  | Tnew new_argument               { mk_e(New (None, $2))     [$1] }
  | Tnew TOPar argument_list_ne TCPar new_argument { mk_e(New (Some $3, $5))             [$1; $2; $4] }
  | Tdelete cast_expr               { mk_e(Delete(false, $2))  [$1] }
@@ -857,7 +866,7 @@ new_argument:
      { let ty = addTypeD ($1,nullDecl) in
        let ((returnType,hasreg), iihasreg) = fixDeclSpecForParam ty in
        Right (ArgType { p_namei = None; p_type = returnType;
-			p_register = hasreg, iihasreg;
+                        p_register = hasreg, iihasreg; p_attr = [];
 		      } )
      }
  | new_argument TOCro expr TCCro
@@ -897,9 +906,9 @@ postfix_expr:
 
  /*(* gccext: also called compound literals *)*/
  | topar2 type_name tcpar2 TOBrace TCBrace
-     { mk_e(Constructor ($2, (InitList [], [$4;$5]))) [$1;$3] }
+     { mk_e(Constructor (snd $2, (InitList [], [$4;$5]))) [$1;$3] }
  | topar2 type_name tcpar2 TOBrace initialize_list gcc_comma_opt_struct TCBrace
-     { mk_e(Constructor ($2, (InitList (List.rev $5),[$4;$7] @ $6))) [$1;$3] }
+     { mk_e(Constructor (snd $2, (InitList (List.rev $5),[$4;$7] @ $6))) [$1;$3] }
 
 
 primary_expr:
@@ -945,13 +954,13 @@ string_format:
 /*(* to avoid conflicts have to introduce a _not_empty (ne) version *)*/
 argument_ne:
  | assign_expr { Left $1 }
- | parameter_decl { Right (ArgType $1)  }
+ | parameter_decl_arg { Right (ArgType $1) }
  | action_higherordermacro_ne { Right (ArgAction $1) }
 
 
 argument:
  | assign_expr { Left $1 }
- | parameter_decl { Right (ArgType $1)  }
+ | parameter_decl_arg { Right (ArgType $1) }
  /*(* had conflicts before, but julia fixed them *)*/
  | action_higherordermacro { Right (ArgAction $1) }
 
@@ -1003,7 +1012,10 @@ statement2:
  | Tasm Tvolatile TOPar asmbody TCPar TPtVirg   { Asm $4, [$1;$2;$3;$5;$6] }
 
  /*(* cppext: *)*/
- | TMacroStmt { MacroStmt, [snd $1] }
+ | TMacroStmt TOPar argument_list_ne TCPar {
+   let fn = mk_e(Ident (RegularName (mk_string_wrap $1))) [] in
+   ExprStatement (Some(mk_e (FunCall (fn, $3)) [$2;$4])), [Ast_c.fakeInfo ()] }
+ | TMacroIdStmt { MacroStmt, [snd $1] }
 
  | Texec identifier exec_list TPtVirg { Exec($3), [$1;snd $2;$4] }
 
@@ -1079,8 +1091,9 @@ stat_or_decl:
 
 
 expr_statement:
- | TPtVirg      { None,    [$1] }
- | expr TPtVirg { Some $1, [$2] }
+ | TPtVirg                     { None,    [$1] }
+ | end_attributes TPtVirg      { None,    [$2] }
+ | expr TPtVirg                { Some $1, [$2] }
 
 selection:
  | Tif TOPar expr TCPar cpp_ifdef_statement              %prec SHIFTHERE
@@ -1261,6 +1274,20 @@ type_spec2:
      { Right3 (Decimal($3,Some $5)), [$1;$2;$4;$6] }
  | Tdecimal TOPar const_expr TCPar
      { Right3 (Decimal($3,None)), [$1;$2;$4] }
+ | TautoType {
+     let can_auto_type =
+      let open Flag in
+       match !c_plus_plus with
+         Off -> false
+       | On None -> true
+       | On (Some i) -> i >= 2011
+     in
+     if can_auto_type
+     then (Right3 AutoType, [$1])
+     else
+       let i = Ast_c.parse_info_of_info $1 in
+       raise (Semantic("auto is not a valid C type, try using the --c++ option",
+                       i)) }
 
  /*
  (* parse_typedef_fix1: can't put: TIdent {} cos it make the grammar
@@ -1280,7 +1307,11 @@ type_spec2:
        Right3 (TypeName (name, Ast_c.noTypedefDef())),[] }
 
  | Ttypeof TOPar assign_expr TCPar { Right3 (TypeOfExpr ($3)), [$1;$2;$4] }
- | Ttypeof TOPar type_name   TCPar { Right3 (TypeOfType ($3)), [$1;$2;$4] }
+ | Ttypeof TOPar type_name   TCPar
+     { let ret = Right3 (TypeOfType (snd $3)), [$1;$2;$4] in
+       match (fst $3) with (* warn about dropped attributes *)
+         [] -> ret
+       | _ -> warning "attributes found in typeof(...), dropping" ret }
 
 /*(*----------------------------*)*/
 /*(* workarounds *)*/
@@ -1330,19 +1361,19 @@ pointer:
  | tmul                   { (Ast_c.noattr,fun x -> mk_ty (Pointer x) [$1]) }
  | tmul pointer
      { let (attr,ptr) = $2 in
-       (attr,fun x -> mk_ty (Pointer (ptr x)) [$1]) }
+       (attr,fun x -> ptr (mk_ty (Pointer x) [$1])) }
  | tmul type_qualif_list
      { let (attr,tq) = $2 in
        (attr,fun x -> (tq.qualifD, mk_tybis (Pointer x) [$1]))}
  | tmul type_qualif_list pointer
      { let (attr1,tq) = $2 in
        let (attr2,ptr) = $3 in
-       (attr1@attr2,fun x -> (tq.qualifD, mk_tybis (Pointer (ptr x)) [$1])) }
+       (attr1@attr2,fun x -> ptr (tq.qualifD, mk_tybis (Pointer x) [$1])) }
 
 tmul:
    TMul { $1 }
  | TAnd
-     { if !Flag.c_plus_plus
+     { if !Flag.c_plus_plus <> Flag.Off
      then $1
      else
        let i = Ast_c.parse_info_of_info $1 in
@@ -1379,13 +1410,14 @@ tccro: TCCro { dt "tccro" ();$1 }
 
 /*(*-----------------------------------------------------------------------*)*/
 abstract_declarator:
- | pointer                            { snd $1 }
- |         direct_abstract_declarator { $1 }
- | pointer direct_abstract_declarator { fun x -> x +> $2 +> (snd $1) }
+ | pointer                            { $1 }
+ |         direct_abstract_declarator { ([], $1) }
+ | pointer direct_abstract_declarator
+     { (fst $1, fun x -> x +> $2 +> (snd $1)) }
 
 direct_abstract_declarator:
  | TOPar abstract_declarator TCPar /*(* forunparser: old: $2 *)*/
-     { fun x -> mk_ty (ParenType ($2 x)) [$1;$3] }
+     { fun x -> mk_ty (ParenType ((snd $2) x)) [$1;$3] }
 
  | TOCro            TCCro
      { fun x -> mk_ty (Array (None, x)) [$1;$2] }
@@ -1428,31 +1460,76 @@ parameter_decl2:
      { p_namei = Some name;
        p_type = mk_ty NoType [];
        p_register = (false, []);
+       p_attr = [];
      }
    }
  | decl_spec declaratorp
      { LP.kr_impossible();
        let ((returnType,hasreg),iihasreg) = fixDeclSpecForParam (snd $1) in
-       let (name, ftyp) = $2 in
+       let attrs = (fst $1) @ (fst $2) in
+       let (name, ftyp) = snd $2 in
        { p_namei = Some (name);
          p_type = ftyp returnType;
          p_register = (hasreg, iihasreg);
+         p_attr = attrs;
        }
      }
  | decl_spec abstract_declaratorp
      { LP.kr_impossible();
        let ((returnType,hasreg), iihasreg) = fixDeclSpecForParam (snd $1) in
+       let attrs = (fst $1) @ (fst $2) in
        { p_namei = None;
-         p_type = $2 returnType;
+         p_type = (snd $2) returnType;
          p_register = hasreg, iihasreg;
+         p_attr = attrs;
        }
      }
  | decl_spec
-     { LP.kr_impossible();
-       let ((returnType,hasreg), iihasreg) = fixDeclSpecForParam (snd $1) in
+     { let ((returnType,hasreg), iihasreg) = fixDeclSpecForParam (snd $1) in
        { p_namei = None;
          p_type = returnType;
          p_register = hasreg, iihasreg;
+         p_attr = fst $1;
+       }
+     }
+
+parameter_decl_arg: /* more tolerant */
+   TKRParam {
+     let name = RegularName (mk_string_wrap $1) in
+     LP.add_ident (str_of_name name);
+     { p_namei = Some name;
+       p_type = mk_ty NoType [];
+       p_register = (false, []);
+       p_attr = [];
+     }
+   }
+ | decl_spec declaratorp
+     { LP.kr_impossible();
+       let ((returnType,hasreg),iihasreg) = fixDeclSpecForArg (snd $1) in
+       let attrs = (fst $1) @ (fst $2) in
+       let (name, ftyp) = snd $2 in
+       { p_namei = Some (name);
+         p_type = ftyp returnType;
+         p_register = (hasreg, iihasreg);
+         p_attr = attrs;
+       }
+     }
+ | decl_spec abstract_declaratorp
+     { LP.kr_impossible();
+       let ((returnType,hasreg), iihasreg) = fixDeclSpecForArg (snd $1) in
+       let attrs = (fst $1) @ (fst $2) in
+       { p_namei = None;
+         p_type = snd $2 returnType;
+         p_register = hasreg, iihasreg;
+         p_attr = attrs;
+       }
+     }
+ | decl_spec
+     { let ((returnType,hasreg), iihasreg) = fixDeclSpecForArg (snd $1) in
+       { p_namei = None;
+         p_type = returnType;
+         p_register = hasreg, iihasreg;
+         p_attr = fst $1;
        }
      }
 
@@ -1464,12 +1541,13 @@ parameter_decl2:
 parameter_decl: parameter_decl2 { et "param" ();  $1 }
 
 declaratorp:
- | declarator  { let (attr,dec) = $1 in (* attr gets ignored *)
-                 LP.add_ident (str_of_name (fst dec)); dec }
+ | declarator  { let (attr,dec) = $1 in
+                 LP.add_ident (str_of_name (fst dec)); attr, dec }
  /*(* gccext: *)*/
  | declarator attributes
-               { let (attr,dec) = $1 in (* attr gets ignored *)
-                 LP.add_ident (str_of_name (fst dec)); dec }
+               { let (attr,dec) = $1 in
+                 let attr = attr @ $2 in
+                 LP.add_ident (str_of_name (fst dec)); attr, dec }
 
 abstract_declaratorp:
  | abstract_declarator { $1 }
@@ -1482,10 +1560,12 @@ abstract_declaratorp:
 /*(* for struct and also typename *)*/
 /*(* can't put decl_spec cos no storage is allowed for field struct *)*/
 spec_qualif_list2:
- | type_spec                    { addTypeD ($1, nullDecl) }
- | type_qualif                  { {nullDecl with qualifD = (fst $1,[snd $1])}}
- | type_spec   spec_qualif_list { addTypeD ($1,$2)   }
- | type_qualif spec_qualif_list { addQualifD ($1,$2) }
+ | type_spec                    { ([], addTypeD ($1, nullDecl)) }
+ | type_qualif                  { ([], {nullDecl with qualifD = (fst $1,[snd $1])})}
+ | attribute                    { ([$1], nullDecl) }
+ | type_spec   spec_qualif_list { (fst $2, addTypeD ($1,snd $2)) }
+ | type_qualif spec_qualif_list { (fst $2, addQualifD ($1,snd $2)) }
+ | attribute   spec_qualif_list { ([$1]@(fst $2), snd $2) }
 
 spec_qualif_list: spec_qualif_list2            {  dt "spec_qualif" (); $1 }
 
@@ -1503,9 +1583,13 @@ type_qualif_list:
 
 type_name:
  | spec_qualif_list
-     { let (returnType, _) = fixDeclSpecForDecl $1 in  returnType }
+     { let (attrs, ds) = $1 in
+       let (returnType, _) = fixDeclSpecForDecl ds in (attrs, returnType) }
  | spec_qualif_list abstract_declaratort
-     { let (returnType, _) = fixDeclSpecForDecl $1 in $2 returnType }
+     { let (attrs1, ds) = $1 in
+       let (attrs2, fn) = $2 in
+       let (returnType, _) = fixDeclSpecForDecl ds in
+       (attrs1@attrs2, fn returnType) }
 
 
 
@@ -1519,16 +1603,16 @@ abstract_declaratort:
 /*(*************************************************************************)*/
 
 decl2:
- | decl_spec TPtVirg
+ | decl_spec end_attributes_opt TPtVirg
      { function local ->
        let (returnType,storage) = fixDeclSpecForDecl (snd $1) in
        let iistart = Ast_c.fakeInfo () in
        DeclList ([{v_namei = None; v_type = returnType;
                    v_storage = unwrap storage; v_local = local;
-                   v_attr = fst $1; v_endattr = Ast_c.noattr;
+                   v_attr = fst $1; v_endattr = $2;
                    v_type_bis = ref None;
                 },[]],
-                ($2::iistart::snd storage))
+                ($3::iistart::snd storage))
      }
  | decl_spec init_declarator_list TPtVirg
      { function local ->
@@ -1553,15 +1637,18 @@ decl2:
      }
  /*(* cppext: *)*/
 
- | storage_const_opt TMacroDecl TOPar argument_list TCPar TPtVirg
+ | storage_const_opt TMacroDecl TOPar argument_list TCPar end_attributes_opt
+   TPtVirg
      { function _ ->
        match $1 with
 	 Some (sto,stoii) ->
 	   MacroDecl
-	     ((sto, fst $2, $4, true), (snd $2::$3::$5::$6::fakeInfo()::stoii))
+	     ((sto, fst $2, $4, $6, true),
+              (snd $2::$3::$5::$7::fakeInfo()::stoii))
        | None ->
 	   MacroDecl
-	     ((NoSto, fst $2, $4, true), [snd $2;$3;$5;$6;fakeInfo()]) }
+	     ((NoSto, fst $2, $4, $6, true),
+              [snd $2;$3;$5;$7;fakeInfo()]) }
 
  | storage_const_opt
      TMacroDecl TOPar argument_list TCPar teq initialize TPtVirg
@@ -1601,7 +1688,25 @@ decl_spec2:
 storage_class_spec_nt:
  | Tstatic      { Sto Static,  $1 }
  | Textern      { Sto Extern,  $1 }
- | Tauto        { Sto Auto,    $1 }
+ | Tauto
+     {
+      let can_auto_storage =
+        let open Flag in
+        match !c_plus_plus with
+          Off | On None -> true
+        | On (Some i) -> i < 2011
+      in
+      if can_auto_storage
+      then (Sto Auto, $1)
+      else
+        let i = Ast_c.parse_info_of_info $1 in
+        raise
+          (Semantic
+            ("auto is not a valid storage since C++11, \
+              try removing the version specification on the --c++ option \
+              or removing the whole option",
+             i))
+     }
  | Tregister    { Sto Register,$1 }
 
 storage_class_spec:
@@ -1626,6 +1731,23 @@ init_declarator2:
  | declaratori TOParCplusplusInit argument_list TCPar
      { ($1, ConstrInit($3,[$2;$4])) }
 
+/*(*-----------------------------------------------------------------------*)*/
+/*(* declarators (right part of type and variable). *)*/
+/*(* This is a workaround for the following case: *)*/
+/*(* <type> <declarator>, <attribute> <declarator> ...*)*/
+/*(* The normal init_declarator rule does not handle this, and adding *)*/
+/*(* attributes to it causes conflicts, thus the need for this rule. *)*/
+/*(*-----------------------------------------------------------------------*)*/
+init_declarator_attrs2:
+ | declaratori                  { ($1, NoInit) }
+ | attributes declaratori       { ($2, NoInit) }
+ | declaratori teq initialize   { ($1, ValInit($2, $3)) }
+ | attributes declaratori teq initialize   { ($2, ValInit($3, $4)) }
+ /* C++ only */
+ | declaratori TOParCplusplusInit argument_list TCPar
+     { ($1, ConstrInit($3,[$2;$4])) }
+ | attributes declaratori TOParCplusplusInit argument_list TCPar
+     { ($2, ConstrInit($4,[$3;$5])) }
 
 /*(*----------------------------*)*/
 /*(* workarounds *)*/
@@ -1633,6 +1755,8 @@ init_declarator2:
 teq: TEq  { et "teq" (); $1 }
 
 init_declarator: init_declarator2  { dt "init" (); $1 }
+
+init_declarator_attrs: init_declarator_attrs2 { dt "init_attrs" (); $1 }
 
 
 /*(*----------------------------*)*/
@@ -1770,30 +1894,32 @@ struct_decl2:
 
 
 field_declaration:
- | spec_qualif_list struct_declarator_list TPtVirg
+ | spec_qualif_list struct_declarator_list end_attributes_opt TPtVirg
      {
-       let (returnType,storage) = fixDeclSpecForDecl $1 in
+       let (attrs, ds) = $1 in
+       let (returnType,storage) = fixDeclSpecForDecl ds in
        if fst (unwrap storage) <> NoSto
        then internal_error "parsing don't allow this";
 
        let iistart = Ast_c.fakeInfo () in (* for parallelism with DeclList *)
        FieldDeclList ($2 +> (List.map (fun (f, iivirg) ->
          f returnType, iivirg))
-                         ,[$3;iistart])
+                         ,[$4;iistart])
          (* don't need to check if typedef or func initialised cos
           * grammar don't allow typedef nor initialiser in struct
           *)
      }
 
- | spec_qualif_list TPtVirg
+ | spec_qualif_list end_attributes_opt TPtVirg
      {
+       let (attrs, ds) = $1 in
        (* gccext: allow empty elements if it is a structdef or enumdef *)
-       let (returnType,storage) = fixDeclSpecForDecl $1 in
+       let (returnType,storage) = fixDeclSpecForDecl ds in
        if fst (unwrap storage) <> NoSto
        then internal_error "parsing don't allow this";
 
        let iistart = Ast_c.fakeInfo () in (* for parallelism with DeclList *)
-       FieldDeclList ([(Simple (None, returnType)) , []], [$2;iistart])
+       FieldDeclList ([(Simple (None, returnType)) , []], [$3;iistart])
      }
 
 
@@ -2005,7 +2131,7 @@ define_val:
      }
  | decl_spec abstract_declarator
      { let returnType = fixDeclSpecForMacro (snd $1) in
-       let typ = $2 returnType in
+       let typ = (snd $2) returnType in
        DefineType typ
      }
 
@@ -2119,7 +2245,7 @@ cpp_other:
     * the rule are slightly different, they can't be statement and so expr
     * at the top, only decl or function definition.
     *)*/
- | identifier TOPar argument_list TCPar TPtVirg
+ | identifier TOPar argument_list TCPar end_attributes_opt TPtVirg
      {
        if args_are_params $3
        then
@@ -2139,15 +2265,18 @@ cpp_other:
 	 Declaration(
 	 DeclList ([{v_namei = Some (id,NoInit); v_type = ty;
                       v_storage = unwrap sto; v_local = NotLocalDecl;
-                      v_attr = attrs; v_endattr = Ast_c.noattr;
+                      v_attr = attrs; v_endattr = $5;
 		      v_type_bis = ref None;
                     },[]],
-                   ($5::iistart::snd sto)))
+                   ($6::iistart::snd sto)))
        else
 	 Declaration
-	   (MacroDecl((NoSto, fst $1, $3, true), [snd $1;$2;$4;$5;fakeInfo()]))
+	   (MacroDecl
+             ((NoSto, fst $1, $3, $5, true),
+              [snd $1;$2;$4;$6;fakeInfo()]))
            (* old: MacroTop (fst $1, $3,    [snd $1;$2;$4;$5])  *)
      }
+
 
  /* cheap solution for functions with no return type.  Not really a
        cpp_other, but avoids conflicts */
@@ -2170,7 +2299,9 @@ cpp_other:
  /*(* TCParEOL to fix the end-of-stream bug of ocamlyacc *)*/
  | identifier TOPar argument_list TCParEOL
      { Declaration
-	 (MacroDecl ((NoSto, fst $1, $3, false), [snd $1;$2;$4;fakeInfo()])) }
+	 (MacroDecl
+           ((NoSto, fst $1, $3, Ast_c.noattr, false),
+            [snd $1;$2;$4;fakeInfo()])) }
 
   /*(* ex: EXPORT_NO_SYMBOLS; *)*/
  | identifier TPtVirg { EmptyDef [snd $1;$2] }
@@ -2329,9 +2460,9 @@ enumerator_list:
 
 init_declarator_list:
  | init_declarator                             { [$1,   []] }
- | init_declarator_list TComma cpp_directive_list init_declarator
+ | init_declarator_list TComma cpp_directive_list init_declarator_attrs
      { $1 @ [$4, [$2]] }
- | init_declarator_list TComma init_declarator { $1 @ [$3,     [$2]] }
+ | init_declarator_list TComma init_declarator_attrs { $1 @ [$3, [$2]] }
 
 
 parameter_list:
@@ -2366,8 +2497,15 @@ attribute_list:
 
 attributes: attribute_list { $1 }
 
-end_attributes:
+end_attribute_list:
  | TMacroEndAttr { [Attribute (fst $1), [snd $1]] }
+ | end_attribute_list TMacroEndAttr { $1 @ [Attribute(fst $2), [snd $2]] }
+
+end_attributes: end_attribute_list { $1 }
+
+end_attributes_opt:
+ | end_attributes { $1 }
+ | /*(* empty *)*/ { [] }
 
 comma_opt:
  | TComma {  [$1] }

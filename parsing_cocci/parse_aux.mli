@@ -59,6 +59,7 @@ val clt2mcode :
   (Ast_cocci.added_string * Ast0_cocci.position_info) list *
   (Ast_cocci.added_string * Ast0_cocci.position_info) list * 'b * string ->
   'a * Ast0_cocci.arity * Ast0_cocci.info * Ast0_cocci.mcodekind * 'b ref * int
+val id3name : 'a * 'b * 'c -> 'a
 val id2name : 'a * 'b -> 'a
 val id2clt : 'a * 'b -> 'b
 val id2mcode :
@@ -125,6 +126,15 @@ val mkpdots :
   (Ast_cocci.added_string * Ast0_cocci.position_info) list *
   (Ast_cocci.added_string * Ast0_cocci.position_info) list * Ast0_cocci.anything list *
   string -> Ast0_cocci.base_parameterTypeDef Ast0_cocci.wrap
+val mkenumdots :
+  string ->
+  (Data.line_type * int * int * int * int * int *
+   (Ast_cocci.added_string * Ast0_cocci.position_info) list *
+   (Ast_cocci.added_string * Ast0_cocci.position_info) list * Ast0_cocci.anything list *
+   string) *
+  (string Ast0_cocci.mcode * string Ast0_cocci.mcode * Ast0_cocci.enum_decl)
+  option ->
+  Ast0_cocci.base_enum_decl Ast0_cocci.wrap
 val arith_op :
   Ast_cocci.arithOp ->
   Ast0_cocci.expression ->
@@ -141,6 +151,13 @@ val logic_op :
   string -> Ast0_cocci.expression -> Ast0_cocci.base_expression Ast0_cocci.wrap
 val make_cv :
   Ast_cocci.const_vol Ast0_cocci.mcode option -> Ast0_cocci.typeC -> Ast0_cocci.typeC
+val make_attr:
+  string *
+  (Data.line_type * int * int * int * int * int *
+   (Ast_cocci.added_string * Ast0_cocci.position_info) list *
+   (Ast_cocci.added_string * Ast0_cocci.position_info) list *
+   Ast0_cocci.anything list * string) ->
+   Ast0_cocci.attr
 val top_dots : 'a -> 'a Ast0_cocci.wrap
 val pointerify :
   Ast0_cocci.typeC ->
@@ -543,13 +560,22 @@ val not_format_string :
   Data.line_type * int * int * int * int * int *
   (Ast_cocci.added_string * Ast0_cocci.position_info) list *
   (Ast_cocci.added_string * Ast0_cocci.position_info) list * Ast0_cocci.anything list *
-  string -> Ast0_cocci.base_expression Ast0_cocci.wrap
+  string -> Ast_cocci.isWchar -> Ast0_cocci.base_expression Ast0_cocci.wrap
 val nometas : string -> bool
 val parse_string :
   string ->
   Data.line_type * int * int * int * int * int *
   (Ast_cocci.added_string * Ast0_cocci.position_info) list *
   (Ast_cocci.added_string * Ast0_cocci.position_info) list * Ast0_cocci.anything list *
-  string -> Ast0_cocci.base_expression Ast0_cocci.wrap
+  string -> Ast_cocci.isWchar -> Ast0_cocci.base_expression Ast0_cocci.wrap
 val unfloatl : string -> string
 val unfloatr : string -> string
+val mk_script :
+  'a * string ->
+  Ast_cocci.script_position ->
+  string * 'b ->
+  Ast_cocci.meta_name list ->
+  string list ->
+  string ->
+  (string * string * (Ast_cocci.meta_name * Ast_cocci.metavar) list *
+  Ast_cocci.script_position * string)

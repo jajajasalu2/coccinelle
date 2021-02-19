@@ -1,3 +1,25 @@
+module Token_c :
+  sig
+    type cppcommentkind = Token_c.cppcommentkind =
+	CppDirective
+      | CppIfDirective of ifdef
+      | CppAttr
+      | CppMacro
+      | CppPassingNormal
+      | CppPassingCosWouldGetError
+      | CppPassingExplicit
+    and ifdef = Token_c.ifdef = IfDef | IfDef0 | Else | Endif | Other
+    type info = Common.parse_info
+    type token = token_tag * info
+    and token_tag = Token_c.token_tag =
+	TCommentSpace
+      | TCommentNewline
+      | TComment
+      | TCommentCpp of cppcommentkind
+    type comment_like_token = token
+    val info_of_token : 'a * 'b -> 'b
+    val str_of_token : 'a * Common.parse_info -> string
+  end
 module Ast_c :
   sig
     type posl = int * int
@@ -46,6 +68,7 @@ module Ast_c :
       | ParenType of fullType
       | TypeOfExpr of expression
       | TypeOfType of fullType
+      | AutoType (* c++ >= 11 *)
     and baseType =
       Ast_c.baseType =
         Void
@@ -86,6 +109,7 @@ module Ast_c :
       p_namei : name option;
       p_register : bool wrap;
       p_type : fullType;
+      p_attr : attribute list;
     }
     and typeQualifier = typeQualifierbis wrap
     and typeQualifierbis =
@@ -122,7 +146,7 @@ module Ast_c :
       | RecordPtAccess of expression * name
       | SizeOfExpr of expression
       | SizeOfType of fullType
-      | Cast of fullType * expression
+      | Cast of fullType * attribute list * expression
       | StatementExpr of compound wrap
       | Constructor of fullType * initialiser
       | ParenExpr of expression
@@ -143,7 +167,7 @@ module Ast_c :
       | Int of (string * intType)
       | Float of (string * floatType)
       | DecimalConst of (string * string * string)
-    and isWchar = Ast_c.isWchar = IsWchar | IsChar
+    and isWchar = Ast_c.isWchar = IsWchar | IsUchar | Isuchar | Isu8char | IsChar
     and unaryOp =
       Ast_c.unaryOp =
         GetRef
@@ -264,7 +288,9 @@ module Ast_c :
     and declaration =
       Ast_c.declaration =
         DeclList of onedecl wrap2 list wrap
-      | MacroDecl of (storagebis * string * argument wrap2 list * bool) wrap
+      | MacroDecl of
+          (storagebis * string * argument wrap2 list * attribute list * bool)
+            wrap
       | MacroDeclInit of
           (storagebis * string * argument wrap2 list * initialiser) wrap
     and onedecl =
@@ -370,7 +396,7 @@ module Ast_c :
       Ast_c.ifdef_guard =
         Gifdef of macro_symbol
       | Gifndef of macro_symbol
-      | Gif_str of string
+      | Gif_str of Lexing.position * string
       | Gif of expression
       | Gnone
     and macro_symbol = string
@@ -408,6 +434,7 @@ module Ast_c :
       | MetaStmtListVal of statement_sequencable list * stripped
       | MetaDParamListVal of string wrap wrap2 list
       | MetaFmtVal of string_format
+      | MetaAttributeVal of attribute
       | MetaFragListVal of string_fragment list
       | MetaAssignOpVal of assignOp
       | MetaBinaryOpVal of binaryOp
@@ -586,13 +613,14 @@ module Parse_c :
     val extract_macros :
       Common.filename -> (string, Cpp_token_c.define_def) Common.assoc
     val tokens : ?profile:bool -> Common.filename -> Parser_c.token list
-    val tokens_of_string : string -> Parser_c.token list
+    val tokens_of_string :
+	string -> Lexing.position option -> Parser_c.token list
     val parse : Common.filename -> Ast_c.program
     val parse_gen :
       cpp:bool ->
       tos:bool ->
       ((Lexing.lexbuf -> Parser_c.token) -> Lexing.lexbuf -> 'a) ->
-      string -> 'a
+      Lexing.position option -> string -> 'a
     val type_of_string : string -> Ast_c.fullType
     val statement_of_string : string -> Ast_c.statement
     val cstatement_of_string : string -> Ast_c.statement
@@ -679,6 +707,7 @@ module Parser_c :
       | Tsize_t of Ast_c.info
       | Tssize_t of Ast_c.info
       | Tptrdiff_t of Ast_c.info
+      | TautoType of Ast_c.info
       | Tauto of Ast_c.info
       | Tregister of Ast_c.info
       | Textern of Ast_c.info
@@ -746,6 +775,7 @@ module Parser_c :
       | TMacroAttr of (string * Ast_c.info)
       | TMacroEndAttr of (string * Ast_c.info)
       | TMacroStmt of (string * Ast_c.info)
+      | TMacroIdStmt of (string * Ast_c.info)
       | TMacroIdentBuilder of (string * Ast_c.info)
       | TMacroString of (string * Ast_c.info)
       | TMacroDecl of (string * Ast_c.info)
@@ -765,7 +795,8 @@ module Parser_c :
       (Lexing.lexbuf -> token) -> Lexing.lexbuf -> Ast_c.statement
     val expr : (Lexing.lexbuf -> token) -> Lexing.lexbuf -> Ast_c.expression
     val type_name :
-      (Lexing.lexbuf -> token) -> Lexing.lexbuf -> Ast_c.fullType
+      (Lexing.lexbuf -> token) -> Lexing.lexbuf ->
+      Ast_c.attribute list * Ast_c.fullType
   end
 module Lexer_c :
   sig
@@ -824,6 +855,7 @@ module Pretty_print_c :
       fragment : Ast_c.string_fragment printer;
       fragment_list : Ast_c.string_fragment list printer;
       format : Ast_c.string_format printer;
+      attribute : Ast_c.attribute printer;
       flow : Control_flow_c.node printer;
       name : Ast_c.name printer;
     }
@@ -1355,7 +1387,8 @@ module Flag :
     val defined_virtual_rules : string list ref
     val defined_virtual_env : (string * string) list ref
     val set_defined_virtual_rules : string -> unit
-    val c_plus_plus : bool ref
+    type c_plus_plus = Flag.c_plus_plus = Off | On of int option
+    val c_plus_plus : c_plus_plus ref
     val ibm : bool ref
     val include_headers : bool ref
     val no_include_cache : bool ref
@@ -2489,6 +2522,7 @@ module Ast_cocci :
       | MetaPosDecl of arity * meta_name
       | MetaComDecl of arity * meta_name
       | MetaFmtDecl of arity * meta_name
+      | MetaAttributeDecl of arity * meta_name
       | MetaFragListDecl of arity * meta_name * list_len
       | MetaAnalysisDecl of string * meta_name
       | MetaDeclarerDecl of arity * meta_name
@@ -2504,6 +2538,7 @@ module Ast_cocci :
         NoVal
       | StringSeed of string
       | ListSeed of seed_elem list
+      | ScriptSeed of script_constraint
     and seed_elem =
       Ast_cocci.seed_elem =
         SeedString of string
@@ -2525,7 +2560,8 @@ module Ast_cocci :
       Ast_cocci.base_expression =
         Ident of ident
       | Constant of constant mcode
-      | StringConstant of string mcode * string_fragment dots * string mcode
+      | StringConstant of
+	  string mcode * string_fragment dots * string mcode * Ast_cocci.isWchar
       | FunCall of expression * string mcode * expression dots * string mcode
       | Assignment of expression * assignOp * expression * bool
       | Sequence of expression * string mcode * expression
@@ -2539,7 +2575,7 @@ module Ast_cocci :
       | ArrayAccess of expression * string mcode * expression * string mcode
       | RecordAccess of expression * string mcode * ident
       | RecordPtAccess of expression * string mcode * ident
-      | Cast of string mcode * fullType * string mcode * expression
+      | Cast of string mcode * fullType * attr list * string mcode * expression
       | SizeOfExpr of string mcode * expression
       | SizeOfType of string mcode * string mcode * fullType * string mcode
       | TypeExp of fullType
@@ -2664,11 +2700,12 @@ module Ast_cocci :
       | OrLog
     and constant =
       Ast_cocci.constant =
-        String of string
-      | Char of string
+        String of string * Ast_cocci.isWchar
+      | Char of string * Ast_cocci.isWchar
       | Int of string
       | Float of string
       | DecimalConst of (string * string * string)
+    and isWchar = Ast_cocci.isWchar = IsWchar | IsUchar | Isuchar | Isu8char | IsChar
     and base_fullType =
       Ast_cocci.base_fullType =
         Type of bool * const_vol mcode option * typeC
@@ -2681,19 +2718,21 @@ module Ast_cocci :
         BaseType of baseType * string mcode list
       | SignedT of sign mcode * typeC option
       | Pointer of fullType * string mcode
-      | FunctionPointer of fullType * string mcode * string mcode *
-          string mcode * string mcode * parameter_list * string mcode
+      | ParenType of string mcode (* ( *) * fullType * string mcode (* ) *)
+      | FunctionType of fullType *
+          string mcode (* ( *) * parameter_list * string mcode (* ) *)
       | Array of fullType * string mcode * expression option * string mcode
       | Decimal of string mcode * string mcode * expression *
           string mcode option * expression option * string mcode
       | EnumName of string mcode * ident option
-      | EnumDef of fullType * string mcode * expression dots * string mcode
+      | EnumDef of fullType * string mcode * enum_decl dots * string mcode
       | StructUnionName of structUnion mcode * ident option
       | StructUnionDef of fullType * string mcode * annotated_field dots *
           string mcode
       | TypeOfExpr of string mcode * string mcode * expression * string mcode
       | TypeOfType of string mcode * string mcode * fullType * string mcode
       | TypeName of string mcode
+      | AutoType of string mcode (* auto *) (* c++ >= 11 *)
       | MetaType of meta_name mcode * constraints * keep_binding * inherited
     and fullType = base_fullType wrap
     and typeC = base_typeC wrap
@@ -2730,9 +2769,9 @@ module Ast_cocci :
           string mcode
       | FunProto of fninfo list * ident * string mcode * parameter_list *
           (string mcode * string mcode) option * string mcode * string mcode
-      | TyDecl of fullType * string mcode
+      | TyDecl of fullType * attr list * string mcode
       | MacroDecl of storage mcode option * ident * string mcode *
-          expression dots * string mcode * string mcode
+          expression dots * string mcode * attr list * string mcode
       | MacroDeclInit of storage mcode option * ident * string mcode *
           expression dots * string mcode * string mcode * initialiser *
           string mcode
@@ -2750,9 +2789,6 @@ module Ast_cocci :
     and base_field =
       Ast_cocci.base_field =
         Field of fullType * ident option * bitfield option * string mcode
-      | DisjField of field list
-      | ConjField of field list
-      | OptField of field
       | MetaField of meta_name mcode * constraints * keep_binding * inherited
       | MetaFieldList of meta_name mcode * listlen * constraints *
           keep_binding * inherited
@@ -2762,7 +2798,16 @@ module Ast_cocci :
       Ast_cocci.base_annotated_field =
         FElem of mcodekind * bool * field
       | Fdots of string mcode * field option
+      | DisjField of annotated_field list
+      | ConjField of annotated_field list
+      | OptField  of annotated_field
     and annotated_field = base_annotated_field wrap
+    and base_enum_decl =
+      Ast_cocci.base_enum_decl =
+        Enum of ident * (string mcode * expression) option
+      | EnumComma of string mcode
+      | EnumDots of string mcode * enum_decl option
+    and enum_decl = base_enum_decl wrap
     and base_initialiser =
       Ast_cocci.base_initialiser =
         MetaInit of meta_name mcode * constraints * keep_binding * inherited
@@ -2787,8 +2832,8 @@ module Ast_cocci :
     and initialiser = base_initialiser wrap
     and base_parameterTypeDef =
       Ast_cocci.base_parameterTypeDef =
-        VoidParam of fullType
-      | Param of fullType * ident option
+        VoidParam of fullType * attr list
+      | Param of fullType * ident option * attr list
       | MetaParam of meta_name mcode * constraints * keep_binding * inherited
       | MetaParamList of meta_name mcode * listlen * constraints *
           keep_binding * inherited
@@ -2883,7 +2928,12 @@ module Ast_cocci :
       | FType of fullType
       | FInline of string mcode
       | FAttr of attr
-    and attr = string mcode
+    and base_attr =
+      Ast_cocci.base_attr =
+        Attribute of string mcode
+      | MetaAttribute of meta_name mcode * constraints * keep_binding *
+          inherited
+    and attr = base_attr wrap
     and metaStmtInfo =
       Ast_cocci.metaStmtInfo =
         NotSequencible
@@ -3024,6 +3074,7 @@ module Ast_cocci :
       | LogicalOpTag of logicalOp
       | DeclarationTag of declaration
       | FieldTag of field
+      | EnumDeclTag of enum_decl
       | InitTag of initialiser
       | StorageTag of storage
       | IncFileTag of inc_file
@@ -3032,6 +3083,7 @@ module Ast_cocci :
       | ForInfoTag of forinfo
       | CaseLineTag of case_line
       | StringFragmentTag of string_fragment
+      | AttributeTag of attr
       | ConstVolTag of const_vol
       | Token of string * info option
       | Directive of added_string list
@@ -3041,6 +3093,7 @@ module Ast_cocci :
       | StmtDotsTag of statement dots
       | AnnDeclDotsTag of annotated_decl dots
       | AnnFieldDotsTag of annotated_field dots
+      | EnumDeclDotsTag of enum_decl dots
       | DefParDotsTag of define_param dots
       | TypeCTag of typeC
       | ParamTag of parameterTypeDef
@@ -3248,7 +3301,8 @@ module Ast0_cocci :
       Ast0_cocci.base_expression =
         Ident of ident
       | Constant of Ast_cocci.constant mcode
-      | StringConstant of string mcode * string_fragment dots * string mcode
+      | StringConstant of
+	  string mcode * string_fragment dots * string mcode * Ast_cocci.isWchar
       | FunCall of expression * string mcode * expression dots * string mcode
       | Assignment of expression * assignOp * expression * bool
       | Sequence of expression * string mcode * expression
@@ -3263,7 +3317,7 @@ module Ast0_cocci :
       | ArrayAccess of expression * string mcode * expression * string mcode
       | RecordAccess of expression * string mcode * ident
       | RecordPtAccess of expression * string mcode * ident
-      | Cast of string mcode * typeC * string mcode * expression
+      | Cast of string mcode * typeC * attr list * string mcode * expression
       | SizeOfExpr of string mcode * expression
       | SizeOfType of string mcode * string mcode * typeC * string mcode
       | TypeExp of typeC
@@ -3324,18 +3378,20 @@ module Ast0_cocci :
       | BaseType of Ast_cocci.baseType * string mcode list
       | Signed of Ast_cocci.sign mcode * typeC option
       | Pointer of typeC * string mcode
-      | FunctionPointer of typeC * string mcode * string mcode *
-          string mcode * string mcode * parameter_list * string mcode
+      | ParenType of string mcode * typeC * string mcode
+      | FunctionType of typeC *
+          string mcode * parameter_list * string mcode
       | Array of typeC * string mcode * expression option * string mcode
       | Decimal of string mcode * string mcode * expression *
           string mcode option * expression option * string mcode
       | EnumName of string mcode * ident option
-      | EnumDef of typeC * string mcode * expression dots * string mcode
+      | EnumDef of typeC * string mcode * enum_decl dots * string mcode
       | StructUnionName of Ast_cocci.structUnion mcode * ident option
       | StructUnionDef of typeC * string mcode * field dots * string mcode
       | TypeOfExpr of string mcode * string mcode * expression * string mcode
       | TypeOfType of string mcode * string mcode * typeC * string mcode
       | TypeName of string mcode
+      | AutoType of string mcode (* auto *) (* c++ >= 11 *)
       | MetaType of Ast_cocci.meta_name mcode * constraints * pure
       | AsType of typeC * typeC
       | DisjType of string mcode * typeC list * string mcode list *
@@ -3354,9 +3410,9 @@ module Ast0_cocci :
           attr list * string mcode
       | FunProto of fninfo list * ident * string mcode * parameter_list *
           (string mcode * string mcode) option * string mcode * string mcode
-      | TyDecl of typeC * string mcode
+      | TyDecl of typeC * attr list * string mcode
       | MacroDecl of Ast_cocci.storage mcode option * ident * string mcode *
-          expression dots * string mcode * string mcode
+          expression dots * string mcode * attr list * string mcode
       | MacroDeclInit of Ast_cocci.storage mcode option * ident *
           string mcode * expression dots * string mcode * string mcode *
           initialiser * string mcode
@@ -3381,6 +3437,13 @@ module Ast0_cocci :
       | OptField of field
     and bitfield = string mcode * expression
     and field = base_field wrap
+    and base_enum_decl =
+      Ast0_cocci.base_enum_decl =
+        Enum of ident * (string mcode * expression) option
+      | EnumComma of string mcode
+      | EnumDots of string mcode *
+                    (string mcode * string mcode * enum_decl) option
+    and enum_decl = base_enum_decl wrap
     and base_initialiser =
       Ast0_cocci.base_initialiser =
         MetaInit of Ast_cocci.meta_name mcode * constraints * pure
@@ -3405,8 +3468,8 @@ module Ast0_cocci :
     and initialiser_list = initialiser dots
     and base_parameterTypeDef =
       Ast0_cocci.base_parameterTypeDef =
-        VoidParam of typeC
-      | Param of typeC * ident option
+        VoidParam of typeC * attr list
+      | Param of typeC * ident option * attr list
       | MetaParam of Ast_cocci.meta_name mcode * constraints * pure
       | MetaParamList of Ast_cocci.meta_name mcode * listlen * constraints *
           pure
@@ -3499,7 +3562,11 @@ module Ast0_cocci :
       | FType of typeC
       | FInline of string mcode
       | FAttr of attr
-    and attr = string mcode
+    and base_attr =
+      Ast0_cocci.base_attr =
+        Attribute of string mcode
+      | MetaAttribute of Ast_cocci.meta_name mcode * constraints * pure
+    and attr = base_attr wrap
     and ('a, 'b) whencode =
       ('a, 'b) Ast0_cocci.whencode =
         WhenNot of string mcode * string mcode * 'a
@@ -3581,6 +3648,7 @@ module Ast0_cocci :
       | DotsStmtTag of statement dots
       | DotsDeclTag of declaration dots
       | DotsFieldTag of field dots
+      | DotsEnumDeclTag of enum_decl dots
       | DotsCaseTag of case_line dots
       | DotsDefParamTag of define_param dots
       | IdentTag of ident
@@ -3594,10 +3662,12 @@ module Ast0_cocci :
       | InitTag of initialiser
       | DeclTag of declaration
       | FieldTag of field
+      | EnumDeclTag of enum_decl
       | StmtTag of statement
       | ForInfoTag of forinfo
       | CaseLineTag of case_line
       | StringFragmentTag of string_fragment
+      | AttributeTag of attr
       | TopTag of top_level
       | IsoWhenTag of Ast_cocci.when_modifier
       | IsoWhenTTag of expression
@@ -3611,6 +3681,7 @@ module Ast0_cocci :
     val dotsStmt : statement dots -> anything
     val dotsDecl : declaration dots -> anything
     val dotsField : field dots -> anything
+    val dotsEnumDecl : enum_decl dots -> anything
     val dotsCase : case_line dots -> anything
     val dotsDefParam : define_param dots -> anything
     val ident : ident -> anything
@@ -3696,6 +3767,9 @@ type pos = {
 type param_type =
     Pos of pos list
   | Com of (string list * string list * string list) list
+  | AstCom of (Token_c.comment_like_token list *
+		 Token_c.comment_like_token list *
+		 Token_c.comment_like_token list) list
   | AssignOp of Ast_c.assignOp
   | BinaryOp of Ast_c.binaryOp
   | Str of string
@@ -3713,12 +3787,14 @@ type param_type =
   | FieldList of Ast_c.field list
   | FragList of Ast_c.string_fragment list
   | Fmt of Ast_c.string_format
+  | Attribute of Ast_c.attribute
   | Stmt of Ast_c.statement
   | StmtList of Ast_c.statement_sequencable list
 val fcts :
   (string, param_type list -> Ast_c.metavar_binding_kind ref list -> unit)
   Hashtbl.t
 val bool_fcts : (string, param_type list -> bool) Hashtbl.t
+val string_fcts : (string, param_type list -> string) Hashtbl.t
 val variables_to_merge : (unit -> string array) ref
 val merged_variables : string list array option ref
 val no_format : string -> bool

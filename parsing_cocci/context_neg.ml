@@ -27,6 +27,7 @@ let set_mcodekind x mcodekind =
   | Ast0.DotsStmtTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.DotsDeclTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.DotsFieldTag(d) -> Ast0.set_mcodekind d mcodekind
+  | Ast0.DotsEnumDeclTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.DotsCaseTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.DotsDefParamTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.IdentTag(d) -> Ast0.set_mcodekind d mcodekind
@@ -39,11 +40,13 @@ let set_mcodekind x mcodekind =
   | Ast0.ParamTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.DeclTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.FieldTag(d) -> Ast0.set_mcodekind d mcodekind
+  | Ast0.EnumDeclTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.InitTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.StmtTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.ForInfoTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.CaseLineTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.StringFragmentTag(d) -> Ast0.set_mcodekind d mcodekind
+  | Ast0.AttributeTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.TopTag(d) -> Ast0.set_mcodekind d mcodekind
   | Ast0.IsoWhenTag(_) -> failwith "only within iso phase"
   | Ast0.IsoWhenTTag(_) -> failwith "only within iso phase"
@@ -60,6 +63,7 @@ let set_index x index =
   | Ast0.DotsStmtTag(d) -> Ast0.set_index d index
   | Ast0.DotsDeclTag(d) -> Ast0.set_index d index
   | Ast0.DotsFieldTag(d) -> Ast0.set_index d index
+  | Ast0.DotsEnumDeclTag(d) -> Ast0.set_index d index
   | Ast0.DotsCaseTag(d) -> Ast0.set_index d index
   | Ast0.DotsDefParamTag(d) -> Ast0.set_index d index
   | Ast0.IdentTag(d) -> Ast0.set_index d index
@@ -73,10 +77,12 @@ let set_index x index =
   | Ast0.InitTag(d) -> Ast0.set_index d index
   | Ast0.DeclTag(d) -> Ast0.set_index d index
   | Ast0.FieldTag(d) -> Ast0.set_index d index
+  | Ast0.EnumDeclTag(d) -> Ast0.set_index d index
   | Ast0.StmtTag(d) -> Ast0.set_index d index
   | Ast0.ForInfoTag(d) -> Ast0.set_index d index
   | Ast0.CaseLineTag(d) -> Ast0.set_index d index
   | Ast0.StringFragmentTag(d) -> Ast0.set_index d index
+  | Ast0.AttributeTag(d) -> Ast0.set_index d index
   | Ast0.TopTag(d) -> Ast0.set_index d index
   | Ast0.IsoWhenTag(_) -> failwith "only within iso phase"
   | Ast0.IsoWhenTTag(_) -> failwith "only within iso phase"
@@ -92,6 +98,7 @@ let get_index = function
   | Ast0.DotsStmtTag(d) -> Index.statement_dots d
   | Ast0.DotsDeclTag(d) -> Index.declaration_dots d
   | Ast0.DotsFieldTag(d) -> Index.field_dots d
+  | Ast0.DotsEnumDeclTag(d) -> Index.enum_decl_dots d
   | Ast0.DotsCaseTag(d) -> Index.case_line_dots d
   | Ast0.DotsDefParamTag(d) -> Index.define_param_dots d
   | Ast0.IdentTag(d) -> Index.ident d
@@ -105,10 +112,12 @@ let get_index = function
   | Ast0.InitTag(d) -> Index.initialiser d
   | Ast0.DeclTag(d) -> Index.declaration d
   | Ast0.FieldTag(d) -> Index.field d
+  | Ast0.EnumDeclTag(d) -> Index.enum_decl d
   | Ast0.StmtTag(d) -> Index.statement d
   | Ast0.ForInfoTag(d) -> Index.forinfo d
   | Ast0.CaseLineTag(d) -> Index.case_line d
   | Ast0.StringFragmentTag(d) -> Index.string_fragment d
+  | Ast0.AttributeTag(d) -> Index.attribute d
   | Ast0.TopTag(d) -> Index.top_level d
   | Ast0.IsoWhenTag(_) -> failwith "only within iso phase"
   | Ast0.IsoWhenTTag(_) -> failwith "only within iso phase"
@@ -174,9 +183,10 @@ let collect_plus_lines top =
       mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
       mcode mcode
       donothing donothing donothing donothing donothing donothing donothing
-      donothing
+      donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
-      donothing donothing statement donothing donothing donothing donothing in
+      donothing donothing donothing statement donothing donothing donothing
+      donothing donothing in
   fn.VT0.combiner_rec_top_level top
 
 (* --------------------------------------------------------------------- *)
@@ -393,6 +403,7 @@ let classify is_minus all_marked table code =
 	  disj_cases e starter expr_list r.VT0.combiner_rec_expression ender
       |	_ -> k e) in
 
+
   (* not clear why we have the next cases, since DisjDecl and
   as it only comes from isos *)
   (* actually, DisjDecl now allowed in source struct decls *)
@@ -416,7 +427,8 @@ let classify is_minus all_marked table code =
 	    (bind (r.VT0.combiner_rec_typeC ty)
 	       (bind (r.VT0.combiner_rec_ident id)
                   (bind
-                     (List.fold_right bind (List.map mcode attr)
+                     (List.fold_right bind
+                       (List.map r.VT0.combiner_rec_attribute attr)
 			option_default)
 		     (bind (mcode eq)
 			(bind (r.VT0.combiner_rec_initialiser ini)
@@ -426,7 +438,8 @@ let classify is_minus all_marked table code =
 	    (bind (r.VT0.combiner_rec_typeC ty)
 	       (bind (r.VT0.combiner_rec_ident id)
                   (bind
-                     (List.fold_right bind (List.map mcode attr)
+                     (List.fold_right bind
+                       (List.map r.VT0.combiner_rec_attribute attr)
 			option_default)
 		     (mcode sem))))
       |	_ -> k e) in
@@ -446,12 +459,26 @@ let classify is_minus all_marked table code =
 	       (bind (Common.default option_default bitfield bf) (mcode sem)))
       |	_ -> k e) in
 
+  let enum_decl r k e =
+    compute_result Ast0.enum_decl e
+      (match Ast0.unwrap e with
+	Ast0.Enum(name,Some(eq,eval)) ->
+          bind (r.VT0.combiner_rec_ident name)
+            (bind (mcode eq) (r.VT0.combiner_rec_expression eval))
+      | Ast0.EnumDots(dots,whencode) ->
+	  k (Ast0.rewrap e (Ast0.EnumDots(dots,None)))
+      | _ -> k e) in
+
   let param r k e =
     compute_result Ast0.param e
       (match Ast0.unwrap e with
-	Ast0.Param(ty,Some id) ->
+	Ast0.Param(ty,Some id,attr) ->
 	  (* needed for the same reason as in the Init and UnInit cases *)
-	  bind (r.VT0.combiner_rec_typeC ty) (r.VT0.combiner_rec_ident id)
+	  bind (r.VT0.combiner_rec_typeC ty)
+           (bind (r.VT0.combiner_rec_ident id)
+              (List.fold_right bind
+                 (List.map r.VT0.combiner_rec_attribute attr)
+                 option_default))
       |	_ -> k e) in
 
   let typeC r k e =
@@ -526,12 +553,12 @@ let classify is_minus all_marked table code =
       (do_nothing Ast0.dotsExpr) (do_nothing Ast0.dotsInit)
       (do_nothing Ast0.dotsParam) (do_nothing Ast0.dotsStmt)
       (do_nothing Ast0.dotsDecl) (do_nothing Ast0.dotsField)
-      (do_nothing Ast0.dotsCase)
+      (do_nothing Ast0.dotsEnumDecl) (do_nothing Ast0.dotsCase)
       (do_nothing Ast0.dotsDefParam)
       ident expression (do_nothing Ast0.assignOp) (do_nothing Ast0.binaryOp)
-      typeC initialiser param declaration field
+      typeC initialiser param declaration field enum_decl
       statement (do_nothing Ast0.forinfo) case_line string_fragment
-      (do_top Ast0.top) in
+      (do_nothing Ast0.attr) (do_top Ast0.top) in
   combiner.VT0.combiner_rec_top_level code
 
 (* --------------------------------------------------------------------- *)
@@ -566,6 +593,14 @@ let equal_option e1 e2 =
 let dots fn d1 d2 =
   List.length (Ast0.unwrap d1) = List.length (Ast0.unwrap d2)
 
+let equal_attribute a1 a2 =
+  match (Ast0.unwrap a1, Ast0.unwrap a2) with
+    (Ast0.Attribute(attr1),Ast0.Attribute(attr2)) ->
+      equal_mcode attr1 attr2
+  | (Ast0.MetaAttribute(name1,_,_),Ast0.MetaAttribute(name2,_,_)) ->
+      equal_mcode name1 name2
+  | _ -> false
+
 let equal_ident i1 i2 =
   match (Ast0.unwrap i1,Ast0.unwrap i2) with
     (Ast0.Id(name1),Ast0.Id(name2)) -> equal_mcode name1 name2
@@ -589,8 +624,8 @@ let rec equal_expression e1 e2 =
   match (Ast0.unwrap e1,Ast0.unwrap e2) with
     (Ast0.Ident(_),Ast0.Ident(_)) -> true
   | (Ast0.Constant(const1),Ast0.Constant(const2)) -> equal_mcode const1 const2
-  | (Ast0.StringConstant(lq1,const1,rq1),Ast0.StringConstant(lq2,const2,rq2))->
-      equal_mcode lq1 lq2 && equal_mcode rq1 rq2
+  | (Ast0.StringConstant(lq1,const1,rq1,isWchar1),Ast0.StringConstant(lq2,const2,rq2,isWchar2))->
+      equal_mcode lq1 lq2 && equal_mcode rq1 rq2 && isWchar1 = isWchar2
   | (Ast0.FunCall(_,lp1,_,rp1),Ast0.FunCall(_,lp2,_,rp2)) ->
       equal_mcode lp1 lp2 && equal_mcode rp1 rp2
   | (Ast0.Assignment(_,op1,_,_),Ast0.Assignment(_,op2,_,_)) ->
@@ -611,8 +646,11 @@ let rec equal_expression e1 e2 =
       equal_mcode pt1 pt2
   | (Ast0.RecordPtAccess(_,ar1,_),Ast0.RecordPtAccess(_,ar2,_)) ->
       equal_mcode ar1 ar2
-  | (Ast0.Cast(lp1,_,rp1,_),Ast0.Cast(lp2,_,rp2,_)) ->
-      equal_mcode lp1 lp2 && equal_mcode rp1 rp2
+  | (Ast0.Cast(lp1,_,ar1,rp1,_),Ast0.Cast(lp2,_,ar2,rp2,_)) ->
+      equal_mcode lp1 lp2 &&
+      (List.length ar1) = (List.length ar2) &&
+      List.for_all2 equal_attribute ar1 ar2 &&
+      equal_mcode rp1 rp2
   | (Ast0.SizeOfExpr(szf1,_),Ast0.SizeOfExpr(szf2,_)) ->
       equal_mcode szf1 szf2
   | (Ast0.SizeOfType(szf1,lp1,_,rp1),Ast0.SizeOfType(szf2,lp2,_,rp2)) ->
@@ -663,6 +701,10 @@ let equal_typeC t1 t2 =
       equal_mcode sign1 sign2
   | (Ast0.Pointer(_,star1),Ast0.Pointer(_,star2)) ->
       equal_mcode star1 star2
+  | (Ast0.ParenType(lp1,_,rp1),Ast0.ParenType(lp2,_,rp2)) ->
+      equal_mcode lp1 lp2 && equal_mcode rp1 rp2
+  | (Ast0.FunctionType(_,lp1,_,rp1),Ast0.FunctionType(_,lp2,_,rp2)) ->
+      equal_mcode lp1 lp2 && equal_mcode rp1 rp2
   | (Ast0.Array(_,lb1,_,rb1),Ast0.Array(_,lb2,_,rb2)) ->
       equal_mcode lb1 lb2 && equal_mcode rb1 rb2
   | (Ast0.Decimal(dec1,lp1,_,comma1,_,rp1),
@@ -672,7 +714,9 @@ let equal_typeC t1 t2 =
   | (Ast0.EnumName(kind1,_),Ast0.EnumName(kind2,_)) ->
       equal_mcode kind1 kind2
   | (Ast0.EnumDef(_,lb1,_,rb1),Ast0.EnumDef(_,lb2,_,rb2)) ->
-       equal_mcode lb1 lb2 && equal_mcode rb1 rb2
+       let tru1 = equal_mcode lb1 lb2 in
+       let tru2 = equal_mcode rb1 rb2 in
+       tru1 && tru2
   | (Ast0.StructUnionName(kind1,_),Ast0.StructUnionName(kind2,_)) ->
       equal_mcode kind1 kind2
   | (Ast0.StructUnionDef(_,lb1,_,rb1),
@@ -683,6 +727,7 @@ let equal_typeC t1 t2 =
   | (Ast0.TypeOfType(tf1,lp1,_,rp1),Ast0.TypeOfType(tf2,lp2,_,rp2)) ->
       equal_mcode tf1 tf2 && equal_mcode lp1 lp2 && equal_mcode rp1 rp2
   | (Ast0.TypeName(name1),Ast0.TypeName(name2)) -> equal_mcode name1 name2
+  | (Ast0.AutoType(auto1),Ast0.AutoType(auto2)) -> equal_mcode auto1 auto2
   | (Ast0.MetaType(name1,_,_),Ast0.MetaType(name2,_,_)) ->
       equal_mcode name1 name2
   | (Ast0.DisjType(starter1,_,mids1,ender1),
@@ -703,7 +748,7 @@ let equal_fninfo x y =
     (Ast0.FStorage(s1),Ast0.FStorage(s2)) -> equal_mcode s1 s2
   | (Ast0.FType(_),Ast0.FType(_)) -> true
   | (Ast0.FInline(i1),Ast0.FInline(i2)) -> equal_mcode i1 i2
-  | (Ast0.FAttr(i1),Ast0.FAttr(i2)) -> equal_mcode i1 i2
+  | (Ast0.FAttr(i1),Ast0.FAttr(i2)) -> equal_attribute i1 i2
   | _ -> false
 
 let equal_declaration d1 d2 =
@@ -712,10 +757,14 @@ let equal_declaration d1 d2 =
       equal_mcode name1 name2
   | (Ast0.Init(stg1,_,_,attr1,eq1,_,sem1),
      Ast0.Init(stg2,_,_,attr2,eq2,_,sem2)) ->
-      equal_option stg1 stg2 && List.for_all2 equal_mcode attr1 attr2 &&
+      equal_option stg1 stg2 &&
+      (List.length attr1) = (List.length attr2) &&
+      List.for_all2 equal_attribute attr1 attr2 &&
       equal_mcode eq1 eq2 && equal_mcode sem1 sem2
   | (Ast0.UnInit(stg1,_,_,attr1,sem1),Ast0.UnInit(stg2,_,_,attr2,sem2)) ->
-      equal_option stg1 stg2 && List.for_all2 equal_mcode attr1 attr2 &&
+      equal_option stg1 stg2 &&
+      (List.length attr1) = (List.length attr2) &&
+      List.for_all2 equal_attribute attr1 attr2 &&
       equal_mcode sem1 sem2
   | (Ast0.FunProto(fninfo1,name1,lp1,p1,va1,rp1,sem1),
      Ast0.FunProto(fninfo2,name2,lp2,p2,va2,rp2,sem2)) ->
@@ -728,16 +777,20 @@ let equal_declaration d1 d2 =
        List.for_all2 equal_fninfo fninfo1 fninfo2 &&
        equal_mcode lp1 lp2 && equal_varargs va1 va2 &&
        equal_mcode rp1 rp2 && equal_mcode sem1 sem2
-  | (Ast0.MacroDecl(stg1,nm1,lp1,_,rp1,sem1),
-     Ast0.MacroDecl(stg2,nm2,lp2,_,rp2,sem2)) ->
+  | (Ast0.MacroDecl(stg1,nm1,lp1,_,rp1,attr1,sem1),
+     Ast0.MacroDecl(stg2,nm2,lp2,_,rp2,attr2,sem2)) ->
       equal_option stg1 stg2 &&
+      (List.length attr1) = (List.length attr2) &&
+      List.for_all2 equal_attribute attr1 attr2 &&
       equal_mcode lp1 lp2 && equal_mcode rp1 rp2 && equal_mcode sem1 sem2
   | (Ast0.MacroDeclInit(stg1,nm1,lp1,_,rp1,eq1,_,sem1),
      Ast0.MacroDeclInit(stg2,nm2,lp2,_,rp2,eq2,_,sem2)) ->
        equal_option stg1 stg2 &&
        equal_mcode lp1 lp2 && equal_mcode rp1 rp2 && equal_mcode eq1 eq2
 	 && equal_mcode sem1 sem2
-  | (Ast0.TyDecl(_,sem1),Ast0.TyDecl(_,sem2)) -> equal_mcode sem1 sem2
+  | (Ast0.TyDecl(_,attr1,sem1),Ast0.TyDecl(_,attr2,sem2)) ->
+       (List.length attr1) = (List.length attr2) &&
+       List.for_all2 equal_attribute attr1 attr2 && equal_mcode sem1 sem2
   | (Ast0.OptDecl(_),Ast0.OptDecl(_)) -> true
   | (Ast0.DisjDecl(starter1,_,mids1,ender1),
      Ast0.DisjDecl(starter2,_,mids2,ender2))
@@ -764,6 +817,19 @@ let equal_field d1 d2 =
        equal_mcode starter1 starter2 &&
        List.for_all2 equal_mcode mids1 mids2 &&
        equal_mcode ender1 ender2
+  | _ -> false
+
+let equal_enum_decl d1 d2 =
+  match (Ast0.unwrap d1,Ast0.unwrap d2) with
+    (Ast0.Enum(name1,enum_val1),Ast0.Enum(name2,enum_val2)) ->
+      equal_ident name1 name2 &&
+      (match enum_val1,enum_val2 with
+        None,None -> true
+      | Some (eq1,val1),Some(eq2,val2) ->
+         equal_mcode eq1 eq2 && equal_expression val1 val2
+      | _ -> false)
+  | (Ast0.EnumComma(cm1),Ast0.EnumComma(cm2)) -> equal_mcode cm1 cm2
+  | (Ast0.EnumDots(dots1,_),Ast0.EnumDots(dots2,_)) -> equal_mcode dots1 dots2
   | _ -> false
 
 let equal_designator d1 d2 =
@@ -802,8 +868,12 @@ let equal_initialiser i1 i2 =
 
 let equal_parameterTypeDef p1 p2 =
   match (Ast0.unwrap p1,Ast0.unwrap p2) with
-    (Ast0.VoidParam(_),Ast0.VoidParam(_)) -> true
-  | (Ast0.Param(_,_),Ast0.Param(_,_)) -> true
+    (Ast0.VoidParam(_,ar1),Ast0.VoidParam(_,ar2)) ->
+      (List.length ar1) = (List.length ar2) &&
+      List.for_all2 equal_attribute ar1 ar2
+  | (Ast0.Param(_,_,ar1),Ast0.Param(_,_,ar2)) ->
+      (List.length ar1) = (List.length ar2) &&
+      List.for_all2 equal_attribute ar1 ar2
   | (Ast0.MetaParam(name1,_,_),Ast0.MetaParam(name2,_,_))
   | (Ast0.MetaParamList(name1,_,_,_),Ast0.MetaParamList(name2,_,_,_)) ->
       equal_mcode name1 name2
@@ -939,6 +1009,8 @@ let root_equal e1 e2 =
   | (Ast0.DotsStmtTag(d1),Ast0.DotsStmtTag(d2)) -> dots equal_statement d1 d2
   | (Ast0.DotsDeclTag(d1),Ast0.DotsDeclTag(d2)) -> dots equal_declaration d1 d2
   | (Ast0.DotsFieldTag(d1),Ast0.DotsFieldTag(d2)) -> dots equal_field d1 d2
+  | (Ast0.DotsEnumDeclTag(d1),Ast0.DotsEnumDeclTag(d2)) ->
+      dots equal_field d1 d2
   | (Ast0.DotsCaseTag(d1),Ast0.DotsCaseTag(d2)) -> dots equal_case_line d1 d2
   | (Ast0.DotsDefParamTag(d1),Ast0.DotsDefParamTag(d2)) ->
       dots equal_define_param d1 d2
@@ -952,6 +1024,7 @@ let root_equal e1 e2 =
   | (Ast0.InitTag(d1),Ast0.InitTag(d2)) -> equal_initialiser d1 d2
   | (Ast0.DeclTag(d1),Ast0.DeclTag(d2)) -> equal_declaration d1 d2
   | (Ast0.FieldTag(d1),Ast0.FieldTag(d2)) -> equal_field d1 d2
+  | (Ast0.EnumDeclTag(d1),Ast0.EnumDeclTag(d2)) -> equal_enum_decl d1 d2
   | (Ast0.StmtTag(s1),Ast0.StmtTag(s2)) -> equal_statement s1 s2
   | (Ast0.TopTag(t1),Ast0.TopTag(t2)) -> equal_top_level t1 t2
   | (Ast0.IsoWhenTag(_),_) | (_,Ast0.IsoWhenTag(_))
@@ -996,7 +1069,7 @@ let contextify_all =
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
-    donothing
+    donothing donothing donothing donothing
 
 let contextify_whencode =
   let bind x y = () in
@@ -1117,14 +1190,20 @@ let rec is_exp s =
   match Ast0.unwrap s with
     Ast0.Exp(e) -> true
   | Ast0.Disj(_,stmts,_,_) -> isall is_exp stmts
-  | Ast0.Conj(_,stmts,_,_) -> isany is_exp stmts
+  | Ast0.Conj(_,s::_,_,_) ->
+      (* the parser ensures that if the Conj matches a
+	 statement, the statement is in the first position *)
+      isonly is_exp s
   | _ -> false
 
 let rec is_ty s =
   match Ast0.unwrap s with
     Ast0.Ty(e) -> true
   | Ast0.Disj(_,stmts,_,_) -> isall is_ty stmts
-  | Ast0.Conj(_,stmts,_,_) -> isany is_ty stmts
+  | Ast0.Conj(_,s::_,_,_) ->
+      (* the parser ensures that if the Conj matches a
+	 statement, the statement is in the first position *)
+      isonly is_ty s
   | _ -> false
 
 let rec is_init s =

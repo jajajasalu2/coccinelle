@@ -18,6 +18,7 @@ type 'n all_functions =
       typeC : (Ast0.typeC,'n) inout;
       declaration : (Ast0.declaration,'n) inout;
       field : (Ast0.field,'n) inout;
+      enum_decl : (Ast0.enum_decl,'n) inout;
       initialiser : (Ast0.initialiser,'n) inout;
       initialiser_list : (Ast0.initialiser_list,'n) inout;
       parameter : (Ast0.parameterTypeDef,'n) inout;
@@ -27,11 +28,13 @@ type 'n all_functions =
       case_line : (Ast0.case_line,'n) inout;
       define_param : (Ast0.define_param,'n) inout;
       string_fragment : (Ast0.string_fragment,'n) inout;
+      attribute : (Ast0.attr,'n) inout;
       top_level : (Ast0.top_level,'n) inout;
       expression_dots : (Ast0.expression Ast0.dots,'n) inout;
       statement_dots : (Ast0.statement Ast0.dots,'n) inout;
       declaration_dots : (Ast0.declaration Ast0.dots,'n) inout;
       field_dots : (Ast0.field Ast0.dots,'n) inout;
+      enum_decl_dots : (Ast0.enum_decl Ast0.dots,'n) inout;
       case_line_dots : (Ast0.case_line Ast0.dots,'n) inout;
       define_param_dots : (Ast0.define_param Ast0.dots,'n) inout;
       anything : (Ast0.anything,'n) inout}
@@ -50,6 +53,7 @@ type 'n combiner_rec_functions =
       combiner_rec_typeC : (Ast0.typeC,'n) combiner_inout;
       combiner_rec_declaration : (Ast0.declaration,'n) combiner_inout;
       combiner_rec_field : (Ast0.field,'n) combiner_inout;
+      combiner_rec_enumdecl : (Ast0.enum_decl,'n) combiner_inout;
       combiner_rec_initialiser : (Ast0.initialiser,'n) combiner_inout;
       combiner_rec_initialiser_list :
 	(Ast0.initialiser_list,'n) combiner_inout;
@@ -60,6 +64,7 @@ type 'n combiner_rec_functions =
       combiner_rec_case_line : (Ast0.case_line,'n) combiner_inout;
       combiner_rec_define_param : (Ast0.define_param,'n) combiner_inout;
       combiner_rec_string_fragment : (Ast0.string_fragment,'n) combiner_inout;
+      combiner_rec_attribute : (Ast0.attr,'n) combiner_inout;
       combiner_rec_top_level : (Ast0.top_level,'n) combiner_inout;
       combiner_rec_expression_dots :
 	(Ast0.expression Ast0.dots,'n) combiner_inout;
@@ -69,6 +74,8 @@ type 'n combiner_rec_functions =
 	(Ast0.declaration Ast0.dots,'n) combiner_inout;
       combiner_rec_field_dots :
 	(Ast0.field Ast0.dots,'n) combiner_inout;
+      combiner_rec_enum_decl_dots :
+	(Ast0.enum_decl Ast0.dots,'n) combiner_inout;
       combiner_rec_case_line_dots :
 	(Ast0.case_line Ast0.dots,'n) combiner_inout;
       combiner_rec_define_param_dots :
@@ -100,6 +107,7 @@ type 'n combiner_functions =
    combiner_dotsstmtfn : (Ast0.statement Ast0.dots,'n) ccode;
    combiner_dotsdeclfn : (Ast0.declaration Ast0.dots,'n) ccode;
    combiner_dotsfieldfn : (Ast0.field Ast0.dots,'n) ccode;
+   combiner_dotsenumdeclfn : (Ast0.enum_decl Ast0.dots,'n) ccode;
    combiner_dotscasefn : (Ast0.case_line Ast0.dots,'n) ccode;
    combiner_dotsdefparfn : (Ast0.define_param Ast0.dots,'n) ccode;
    combiner_identfn : (Ast0.ident,'n) ccode;
@@ -111,10 +119,12 @@ type 'n combiner_functions =
    combiner_paramfn : (Ast0.parameterTypeDef,'n) ccode;
    combiner_declfn : (Ast0.declaration,'n) ccode;
    combiner_fieldfn : (Ast0.field,'n) ccode;
+   combiner_enumdeclfn : (Ast0.enum_decl,'n) ccode;
    combiner_stmtfn : (Ast0.statement,'n) ccode;
    combiner_forinfofn : (Ast0.forinfo,'n) ccode;
    combiner_casefn : (Ast0.case_line,'n) ccode;
    combiner_string_fragmentfn : (Ast0.string_fragment,'n) ccode;
+   combiner_attributefn : (Ast0.attr,'n) ccode;
    combiner_topfn : (Ast0.top_level,'n) ccode}
 
 (* ----------------------------------------------------------------------- *)
@@ -131,6 +141,7 @@ type rebuilder_rec_functions =
       rebuilder_rec_typeC : Ast0.typeC rebuilder_inout;
       rebuilder_rec_declaration : Ast0.declaration rebuilder_inout;
       rebuilder_rec_field : Ast0.field rebuilder_inout;
+      rebuilder_rec_enumdecl : Ast0.enum_decl rebuilder_inout;
       rebuilder_rec_initialiser : Ast0.initialiser rebuilder_inout;
       rebuilder_rec_initialiser_list :
 	Ast0.initialiser_list rebuilder_inout;
@@ -140,6 +151,7 @@ type rebuilder_rec_functions =
       rebuilder_rec_forinfo : Ast0.forinfo rebuilder_inout;
       rebuilder_rec_case_line : Ast0.case_line rebuilder_inout;
       rebuilder_rec_string_fragment : Ast0.string_fragment rebuilder_inout;
+      rebuilder_rec_attribute : Ast0.attr rebuilder_inout;
       rebuilder_rec_top_level : Ast0.top_level rebuilder_inout;
       rebuilder_rec_expression_dots :
 	Ast0.expression Ast0.dots rebuilder_inout;
@@ -149,6 +161,8 @@ type rebuilder_rec_functions =
 	Ast0.declaration Ast0.dots rebuilder_inout;
       rebuilder_rec_field_dots :
 	Ast0.field Ast0.dots rebuilder_inout;
+      rebuilder_rec_enum_decl_dots :
+	Ast0.enum_decl Ast0.dots rebuilder_inout;
       rebuilder_rec_case_line_dots :
 	Ast0.case_line Ast0.dots rebuilder_inout;
       rebuilder_rec_define_param_dots :
@@ -180,6 +194,7 @@ type rebuilder_functions =
    rebuilder_dotsstmtfn : Ast0.statement Ast0.dots rcode;
    rebuilder_dotsdeclfn : Ast0.declaration Ast0.dots rcode;
    rebuilder_dotsfieldfn : Ast0.field Ast0.dots rcode;
+   rebuilder_dotsenumdeclfn : Ast0.enum_decl Ast0.dots rcode;
    rebuilder_dotscasefn : Ast0.case_line Ast0.dots rcode;
    rebuilder_dotsdefparfn : Ast0.define_param Ast0.dots rcode;
    rebuilder_identfn : Ast0.ident rcode;
@@ -192,10 +207,12 @@ type rebuilder_functions =
    rebuilder_paramfn : Ast0.parameterTypeDef rcode;
    rebuilder_declfn : Ast0.declaration rcode;
    rebuilder_fieldfn : Ast0.field rcode;
+   rebuilder_enumdeclfn : Ast0.enum_decl rcode;
    rebuilder_stmtfn : Ast0.statement rcode;
    rebuilder_forinfofn : Ast0.forinfo rcode;
    rebuilder_casefn : Ast0.case_line rcode;
    rebuilder_string_fragmentfn : Ast0.string_fragment rcode;
+   rebuilder_attributefn : Ast0.attr rcode;
    rebuilder_topfn : Ast0.top_level rcode}
 
 (* ----------------------------------------------------------------------- *)
@@ -227,6 +244,7 @@ type 'n combiner_rebuilder_functions =
    combiner_rebuilder_dotsstmtfn : (Ast0.statement Ast0.dots,'n) rccode;
    combiner_rebuilder_dotsdeclfn : (Ast0.declaration Ast0.dots,'n) rccode;
    combiner_rebuilder_dotsfieldfn : (Ast0.field Ast0.dots,'n) rccode;
+   combiner_rebuilder_dotsenumdeclfn : (Ast0.enum_decl Ast0.dots,'n) rccode;
    combiner_rebuilder_dotscasefn : (Ast0.case_line Ast0.dots,'n) rccode;
    combiner_rebuilder_dotsdefparfn : (Ast0.define_param Ast0.dots,'n) rccode;
    combiner_rebuilder_identfn : (Ast0.ident,'n) rccode;
@@ -238,8 +256,10 @@ type 'n combiner_rebuilder_functions =
    combiner_rebuilder_paramfn : (Ast0.parameterTypeDef,'n) rccode;
    combiner_rebuilder_declfn : (Ast0.declaration,'n) rccode;
    combiner_rebuilder_fieldfn : (Ast0.field,'n) rccode;
+   combiner_rebuilder_enumdeclfn : (Ast0.enum_decl,'n) rccode;
    combiner_rebuilder_stmtfn : (Ast0.statement,'n) rccode;
    combiner_rebuilder_forinfofn : (Ast0.forinfo,'n) rccode;
    combiner_rebuilder_casefn : (Ast0.case_line,'n) rccode;
    combiner_rebuilder_string_fragmentfn : (Ast0.string_fragment,'n) rccode;
+   combiner_rebuilder_attributefn : (Ast0.attr,'n) rccode;
    combiner_rebuilder_topfn : (Ast0.top_level,'n) rccode}

@@ -171,7 +171,7 @@ let rec expression e =
       match Ast0.unwrap e with
 	Ast0.Ident(id) -> ident id
       | Ast0.Constant(const) -> mcode U.constant const
-      | Ast0.StringConstant(lq,str,rq) ->
+      | Ast0.StringConstant(lq,str,rq,_sz) ->
 	  mcode print_string lq;
 	  let _ = dots (function _ -> ()) string_fragment str in
 	  mcode print_string rq
@@ -221,8 +221,9 @@ let rec expression e =
 	  expression exp; mcode print_string pt; ident field
       | Ast0.RecordPtAccess(exp,ar,field) ->
 	  expression exp; mcode print_string ar; ident field
-      | Ast0.Cast(lp,ty,rp,exp) ->
+      | Ast0.Cast(lp,ty,attr,rp,exp) ->
 	  mcode print_string_box lp; typeC ty; close_box();
+          print_attribute_list attr;
 	  mcode print_string rp; expression exp
       | Ast0.SizeOfExpr(szf,exp) ->
 	  mcode print_string szf; expression exp
@@ -287,10 +288,34 @@ and string_format e =
 (* --------------------------------------------------------------------- *)
 (* Types *)
 
-and print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2) fn =
-  typeC ty; mcode print_string lp1; mcode print_string star; fn();
-  mcode print_string rp1; mcode print_string lp2;
-  parameter_list params; mcode print_string rp2
+and print_parentype (lp,ty,rp) fn =
+  let function_pointer ty1 array_decs =
+    match Ast0.unwrap ty1 with
+      Ast0.Pointer(ty2,star) ->
+        (match Ast0.unwrap ty2 with
+          Ast0.FunctionType(ty3,lp3,params,rp3) ->
+            typeC ty3;
+            mcode print_string lp;
+            mcode print_string star;
+            let _ =
+              match array_decs with
+                Some(lb1,size,rb1) ->
+                  mcode print_string lb1;
+                  print_option expression size;
+                  mcode print_string rb1
+              | None -> () in
+            mcode print_string rp;
+            mcode print_string lp3;
+            parameter_list params;
+            mcode print_string rp3;
+	| _ -> failwith "ParenType Unparse_ast0")
+    | _ -> failwith "ParenType Unparse_ast0" in
+  match Ast0.unwrap ty with
+    Ast0.Array(ty1,lb1,size,rb1) ->
+      function_pointer ty1 (Some(lb1,size,rb1))
+  | Ast0.Pointer(ty1,star) ->
+      function_pointer ty None
+  | _ -> failwith "ParenType Unparse_ast0"
 
 and typeC t =
   print_context t
@@ -303,9 +328,13 @@ and typeC t =
 	    strings
       |	Ast0.Signed(sgn,ty) -> mcode U.sign sgn; print_option typeC ty
       | Ast0.Pointer(ty,star) -> typeC ty; mcode print_string star
-      | Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-	  print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2)
-	    (function _ -> ())
+      | Ast0.ParenType(lp,ty,rp) ->
+          print_parentype (lp,ty,rp) (function _ -> ())
+      | Ast0.FunctionType(ty,lp,params,rp) ->
+          typeC ty;
+          mcode print_string lp;
+          parameter_list params;
+          mcode print_string rp
       | Ast0.Array(ty,lb,size,rb) ->
 	  typeC ty; mcode print_string lb; print_option expression size;
 	  mcode print_string rb
@@ -321,7 +350,7 @@ and typeC t =
 	  print_option (function x -> ident x; print_string " ") name
       | Ast0.EnumDef(ty,lb,ids,rb) ->
 	  typeC ty; mcode print_string lb;
-	  dots force_newline expression ids;
+	  dots force_newline enum_decl ids;
 	  mcode print_string rb
       | Ast0.StructUnionName(kind,name) ->
 	  mcode U.structUnion kind;
@@ -339,6 +368,7 @@ and typeC t =
 	  mcode print_string_box lp; typeC ty; close_box();
 	  mcode print_string rp
       | Ast0.TypeName(name)-> mcode print_string name; print_string " "
+      | Ast0.AutoType(auto) -> mcode print_string auto; print_string " "
       | Ast0.MetaType(name,_,_)-> mcode print_meta name; print_string " "
       | Ast0.DisjType(_,types,_,_) -> do_disj types typeC "|"
       | Ast0.ConjType(_,types,_,_) -> do_disj types typeC "&"
@@ -352,10 +382,7 @@ and typeC t =
 
 and print_named_type ty id =
   match Ast0.unwrap ty with
-    Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
-      print_function_pointer (ty,lp1,star,rp1,lp2,params,rp2)
-	(function _ -> print_string " "; ident id)
-  | Ast0.Array(ty,lb,size,rb) ->
+    Ast0.Array(ty,lb,size,rb) ->
       let rec loop ty k =
 	match Ast0.unwrap ty with
 	  Ast0.Array(ty,lb,size,rb) ->
@@ -367,6 +394,8 @@ and print_named_type ty id =
 		mcode print_string rb)
 	| _ -> typeC ty; ident id; k () in
       loop ty (function _ -> ())
+  | Ast0.ParenType(lp,ty,rp) ->
+      print_parentype (lp,ty,rp) (function _ -> ident id)
   | _ -> typeC ty; ident id
 
 and declaration d =
@@ -378,15 +407,13 @@ and declaration d =
       |	Ast0.Init(stg,ty,id,attr,eq,ini,sem) ->
 	  print_option (mcode U.storage) stg;
 	  print_named_type ty id;
-	  (if not (attr = []) then print_string " ");
-	  print_between (fun _ -> print_string " ") (mcode print_string) attr;
+          print_attribute_list attr;
 	  print_string " ";
 	  mcode print_string eq; print_string " "; initialiser ini;
 	  mcode print_string sem
       | Ast0.UnInit(stg,ty,id,attr,sem) ->
 	  print_option (mcode U.storage) stg; print_named_type ty id;
-	  (if not (attr = []) then print_string " ");
-	  print_between (fun _ -> print_string " ") (mcode print_string) attr;
+          print_attribute_list attr;
 	  mcode print_string sem
       | Ast0.FunProto(fninfo,name,lp1,params,va,rp1,sem) ->
 	  List.iter print_fninfo fninfo;
@@ -394,11 +421,13 @@ and declaration d =
 	  parameter_list params; varargs va;
 	  close_box(); mcode print_string rp1;
 	  mcode print_string sem
-      | Ast0.MacroDecl(stg,name,lp,args,rp,sem) ->
+      | Ast0.MacroDecl(stg,name,lp,args,rp,attr,sem) ->
 	  print_option (mcode U.storage) stg;
 	  ident name; mcode print_string_box lp;
 	  let _ = dots (function _ -> ()) expression args in
-	  close_box(); mcode print_string rp; mcode print_string sem
+	  close_box(); mcode print_string rp;
+          print_attribute_list attr;
+	  mcode print_string sem
       | Ast0.MacroDeclInit(stg,name,lp,args,rp,eq,ini,sem) ->
 	  print_option (mcode U.storage) stg;
 	  ident name; mcode print_string_box lp;
@@ -407,7 +436,10 @@ and declaration d =
           print_string " ";
           mcode print_string eq; print_string " "; initialiser ini;
 	  mcode print_string sem
-      | Ast0.TyDecl(ty,sem) -> typeC ty; mcode print_string sem
+      | Ast0.TyDecl(ty,attr,sem) ->
+          typeC ty;
+          print_attribute_list attr;
+          mcode print_string sem
       | Ast0.Typedef(stg,ty,id,sem) ->
 	  mcode print_string stg; typeC ty; typeC id;
 	  mcode print_string sem
@@ -453,6 +485,24 @@ and field d =
       | Ast0.Fdots(dots,None) -> mcode print_string dots)
 
 and field_dots l = dots (function _ -> ()) field l
+
+and enum_decl d =
+  print_context d
+    (function _ ->
+      match Ast0.unwrap d with
+	Ast0.Enum(name,enum_val) ->
+          (match enum_val with
+            None -> ident name
+          | Some(eq,eval) ->
+              ident name; mcode print_string eq; expression eval)
+      | Ast0.EnumComma(cm) ->
+          mcode print_string cm; force_newline()
+      | Ast0.EnumDots(dots,Some (_,_,whencode)) ->
+	  mcode print_string dots; print_string "   when != ";
+	  enum_decl whencode
+      | Ast0.EnumDots(dots,None) -> mcode print_string dots)
+
+and enum_decl_dots l = dots (function _ -> ()) enum_decl l
 
 (* --------------------------------------------------------------------- *)
 (* Initialiser *)
@@ -500,9 +550,15 @@ and parameterTypeDef p =
   print_context p
     (function _ ->
       match Ast0.unwrap p with
-	Ast0.VoidParam(ty) -> typeC ty
-      | Ast0.Param(ty,Some id) -> print_named_type ty id
-      |	Ast0.Param(ty,None) -> typeC ty
+        Ast0.VoidParam(ty,attr) ->
+          typeC ty;
+          print_attribute_list attr;
+      | Ast0.Param(ty,Some id,attr) ->
+          print_named_type ty id;
+          print_attribute_list attr;
+      | Ast0.Param(ty,None,attr) ->
+          typeC ty;
+          print_attribute_list attr;
       | Ast0.MetaParam(name,_,_) -> mcode print_meta name
       | Ast0.MetaParamList(name,_,_,_) -> mcode print_meta name
       | Ast0.PComma(cm) -> mcode print_string cm; print_space()
@@ -703,7 +759,16 @@ and print_fninfo = function
     Ast0.FStorage(stg) -> mcode U.storage stg
   | Ast0.FType(ty) -> typeC ty
   | Ast0.FInline(inline) -> mcode print_string inline
-  | Ast0.FAttr(attr) -> mcode print_string attr
+  | Ast0.FAttr(attr) -> print_attribute attr
+
+and print_attribute_list attrs =
+  if not (attrs = []) then print_string " ";
+  print_between (fun _ -> print_string " ") print_attribute attrs
+
+and print_attribute a =
+  match Ast0.unwrap a with
+    Ast0.Attribute(attr) -> mcode print_string attr
+  | Ast0.MetaAttribute(name,_,_) -> mcode print_meta name
 
 and whencode notfn alwaysfn = function
     Ast0.WhenNot (_,_,a) ->
@@ -781,6 +846,7 @@ let rec unparse_anything x =
       statement_dots d
   | Ast0.DotsDeclTag(d) -> declaration_dots d
   | Ast0.DotsFieldTag(d) -> field_dots d
+  | Ast0.DotsEnumDeclTag(d) -> enum_decl_dots d
   | Ast0.DotsCaseTag(d) -> case_dots d
   | Ast0.DotsDefParamTag(d) -> define_param_dots d
   | Ast0.IdentTag(d)    -> ident d
@@ -796,6 +862,7 @@ let rec unparse_anything x =
   | Ast0.InitTag(d)  -> initialiser d
   | Ast0.DeclTag(d)  -> declaration d
   | Ast0.FieldTag(d)  -> field d
+  | Ast0.EnumDeclTag(d)  -> enum_decl d
   | Ast0.StmtTag(d)  ->
       print_string "Stm:"; force_newline();
       statement "" d
@@ -807,6 +874,7 @@ let rec unparse_anything x =
       | Ast0.ForDecl (_,decl) -> declaration decl)
   | Ast0.CaseLineTag(d)  -> case_line "" d
   | Ast0.StringFragmentTag(d)  -> string_fragment d
+  | Ast0.AttributeTag(d) -> print_attribute d
   | Ast0.TopTag(d)       -> top_level d
   | Ast0.IsoWhenTag(x)   -> U.print_when_modif x
   | Ast0.IsoWhenTTag(e)  -> expression e

@@ -43,7 +43,7 @@ let all_removed_recursor =
     do_nothing do_nothing do_nothing do_nothing do_nothing do_nothing
     do_nothing do_nothing do_nothing do_nothing do_nothing do_nothing
     do_nothing do_nothing do_nothing do_nothing do_nothing do_nothing
-    do_nothing do_nothing
+    do_nothing do_nothing do_nothing do_nothing do_nothing
 
 let all_removed_decl =
   all_removed_recursor.V.combiner_declaration
@@ -97,10 +97,16 @@ let contains_modif =
       mcode mcode mcode mcode mcode
       do_nothing do_nothing do_nothing do_nothing do_nothing do_nothing
       do_nothing do_nothing do_nothing do_nothing do_nothing do_nothing
-      do_nothing do_nothing init do_nothing
+      do_nothing do_nothing do_nothing init do_nothing
       do_nothing do_nothing do_nothing do_nothing
-      do_nothing rule_elem do_nothing do_nothing do_nothing do_nothing in
+      do_nothing do_nothing rule_elem do_nothing do_nothing do_nothing
+      do_nothing do_nothing in
   recursor.V.combiner_fullType
+
+let attribute a =
+  match Ast.unwrap a with
+    Ast.Attribute(attr) -> mcode () attr
+  | Ast.MetaAttribute(name,b,c,d) -> mcode () name
 
 let decl r k e =
   let e = k e in
@@ -115,7 +121,7 @@ let decl r k e =
 	    match stg with
 	      Some stg -> mcode () stg
 	    | None -> false in
-	  let attr_modif = List.exists (mcode ()) attr in
+	  let attr_modif = List.exists attribute attr in
 	  let ft_modif = contains_modif ty in
 	  let sem_modif = mcode () sem in
 	  if not(stg_modif || attr_modif || ft_modif || sem_modif)
@@ -172,8 +178,8 @@ let process =
       mcode mcode mcode mcode mcode
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
-      donothing donothing donothing decl anndecl field annfield
-      donothing donothing donothing donothing donothing in
+      donothing donothing donothing donothing decl anndecl field annfield
+      donothing donothing donothing donothing donothing donothing donothing in
   List.map fn.V.rebuilder_top_level
 
 let safe_for_multi_decls rules =

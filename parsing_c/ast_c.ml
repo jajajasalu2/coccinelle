@@ -215,6 +215,7 @@ and fullType = typeQualifier * typeC
    *)
   | TypeOfExpr of expression
   | TypeOfType of fullType
+  | AutoType (* c++ >= 11 *)
 
   (* cppext: IfdefType TODO *)
 
@@ -286,6 +287,7 @@ and fullType = typeQualifier * typeC
         { p_namei: name option;
           p_register: bool wrap;
           p_type: fullType;
+          p_attr: attribute list;
         }
         (* => (bool (register) * fullType) list * bool *)
 
@@ -341,7 +343,7 @@ and expression = (expressionbis * exp_info ref (* semantic: *)) wrap3
 
   | SizeOfExpr     of expression
   | SizeOfType     of fullType
-  | Cast           of fullType * expression
+  | Cast           of fullType * attribute list * expression
 
   (* gccext: *)
   | StatementExpr of compound wrap (* ( )     new scope *)
@@ -385,7 +387,7 @@ and expression = (expressionbis * exp_info ref (* semantic: *)) wrap3
     | Float  of (string * floatType)
     | DecimalConst of (string * string * string)
 
-    and isWchar = IsWchar | IsChar
+    and isWchar = IsWchar | IsUchar | Isuchar | Isu8char | IsChar
 
 
   and unaryOp  = GetRef | DeRef | UnPlus |  UnMinus | Tilde | Not
@@ -559,7 +561,8 @@ and declaration =
   (* cppext: *)
     (* bool is true if there is a ; at the end *)
   | MacroDecl of
-      (storagebis * string * argument wrap2 list * bool) wrap (* fakestart *)
+      (storagebis * string * argument wrap2 list * attribute list * bool)
+        wrap (* fakestart *)
   | MacroDeclInit of
       (storagebis * string * argument wrap2 list * initialiser)
 	wrap (* fakestart *)
@@ -716,12 +719,13 @@ and ifdef_directive = (* or and 'a ifdefed = 'a list wrap *)
      *
      * @author Iago Abal
      *)
-  and ifdef_guard = Gifdef  of macro_symbol (* #ifdef *)
-                  | Gifndef of macro_symbol (* #ifndef *)
-                  | Gif_str of string       (* #if <string to be parsed> *)
-                  | Gif     of expression   (* #if *)
-                  | Gnone   (* ignored #if condition: TIfdefBool,
-                             * TIfdefMisc, and TIfdefVersion
+  and ifdef_guard =
+      Gifdef  of macro_symbol (* #ifdef *)
+    | Gifndef of macro_symbol (* #ifndef *)
+    | Gif_str of Lexing.position * string (* #if <string to be parsed> *)
+    | Gif     of expression   (* #if *)
+    | Gnone   (* ignored #if condition: TIfdefBool,
+                 * TIfdefMisc, and TIfdefVersion
                              *)
   and macro_symbol = string
   (* set in Parsing_hacks.set_ifdef_parenthize_info. It internally use
@@ -817,6 +821,7 @@ and metavars_binding = (Ast_cocci.meta_name, metavar_binding_kind) assoc
   | MetaStmtListVal  of statement_sequencable list * stripped
   | MetaDParamListVal of (string wrap) wrap2 list
   | MetaFmtVal       of string_format
+  | MetaAttributeVal of attribute
   | MetaFragListVal  of string_fragment list
   | MetaAssignOpVal  of assignOp
   | MetaBinaryOpVal  of binaryOp

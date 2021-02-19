@@ -4409,18 +4409,6 @@ open B_Array
 open Bigarray
 *)
 
-
-(* for the string_of auto generation of camlp4
-val b_array_string_of_t : 'a -> 'b -> string
-val bigarray_string_of_int16_unsigned_elt : 'a -> string
-val bigarray_string_of_c_layout : 'a -> string
-let b_array_string_of_t f a = "<>"
-let bigarray_string_of_int16_unsigned_elt a = "<>"
-let bigarray_string_of_c_layout a = "<>"
-
-*)
-
-
 (*****************************************************************************)
 (* Set. Have a look too at set*.mli  *)
 (*****************************************************************************)
@@ -4642,7 +4630,7 @@ let assoc_with_err_msg k l =
 module IntMap = Map.Make
     (struct
       type t = int
-      let compare (x : int) (y : int) = Pervasives.compare x y
+      let compare (x : int) (y : int) = Stdcompat.Stdlib.compare x y
     end)
 let intmap_to_list m = IntMap.fold (fun id v acc -> (id, v) :: acc) m []
 let intmap_string_of_t f a = "<Not Yet>"
@@ -4651,11 +4639,11 @@ module IntIntMap = Map.Make
     (struct
       type t = int * int
       let compare ((x1, y1) : int * int) ((x2, y2) : int * int) =
-	let cmp_x = Pervasives.compare x1 x2 in
+	let cmp_x = Stdcompat.Stdlib.compare x1 x2 in
 	if cmp_x <> 0 then
 	  cmp_x
 	else
-	  Pervasives.compare y1 y2
+	  Stdcompat.Stdlib.compare y1 y2
 end)
 
 let intintmap_to_list m = IntIntMap.fold (fun id v acc -> (id, v) :: acc) m []
@@ -4699,6 +4687,12 @@ let hashadd tbl k v =
       Hashtbl.add tbl k cell;
       cell in
   if not (List.mem v !cell) then cell := v :: !cell
+
+let hashadd_notest tbl k v =
+  try
+    let cur = Hashtbl.find tbl k in
+    Hashtbl.replace tbl k (v::cur)
+  with Not_found -> Hashtbl.add tbl k [v]
 
 let hashinc tbl k v =
   let cell =

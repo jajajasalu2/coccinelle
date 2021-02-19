@@ -360,7 +360,11 @@ let do_get_constants constants keywords env (neg_pos,_) =
 			  Ast.SeedString _ -> prev
 			| Ast.SeedId name ->
 			    bind (inherited name) prev)
-		    prev l)
+		    prev l
+	      | (_,Ast.ScriptSeed (_, _, params, _, _)) ->
+                  List.fold_left
+                    (fun prev (meta_name, _) -> bind (inherited meta_name) prev)
+                    prev params)
 	  option_default fresh in
 
   let rec cstr r k c =
@@ -432,17 +436,17 @@ let do_get_constants constants keywords env (neg_pos,_) =
       Ast.Constant(const) ->
 	bind (k e)
 	  (match Ast.unwrap_mcode const with
-	    Ast.String s -> (*constants s*)
+	    Ast.String(s,sz) -> (*constants s*)
 	      (* not useful if the string contains non letters, etc *)
 	      (* seems safer to ignore *)
 	      option_default
-	  | Ast.Char "\\0" -> option_default (* glimpse doesn't like it *)
-	  | Ast.Char s -> option_default (* probably not chars either *)
+	  | Ast.Char("\\0",sz) -> option_default (* glimpse doesn't like it *)
+	  | Ast.Char(s,sz) -> option_default (* probably not chars either *)
 	  (* the following were eg keywords "1", but not good for glimpse *)
 	  | Ast.Int s -> option_default (* glimpse doesn't index integers *)
 	  | Ast.Float s -> option_default (* probably not floats either *)
 	  | Ast.DecimalConst _ -> option_default (* or decimals *))
-    | Ast.StringConstant(lq,str,rq) -> option_default
+    | Ast.StringConstant(lq,str,rq,sz) -> option_default
 	(* Like the above constant case, this information is not likely indexed
 	let str = Ast.undots str in
 	(* pick up completely constant strings *)
@@ -525,6 +529,11 @@ let do_get_constants constants keywords env (neg_pos,_) =
     | Ast.MetaType(name,_,_,_) -> bind (minherited name) (k ty)
     | _ -> k ty in
 
+  let attribute r k a =
+    match Ast.unwrap a with
+      Ast.MetaAttribute(name,_,_,_) -> bind (k a) (minherited name)
+    | Ast.Attribute(attr) -> constants (Ast.unwrap_mcode attr) in
+
   let declaration r k d =
     match Ast.unwrap d with
       Ast.MetaDecl(name,_,_,_) ->
@@ -535,7 +544,7 @@ let do_get_constants constants keywords env (neg_pos,_) =
     (* need things with explicit names too *)
     | Ast.Init(_,_,_,attr,_,_,_) | Ast.UnInit(_,_,_,attr,_) ->
 	List.fold_left bind (k d)
-	  (List.map (fun attr -> constants (Ast.unwrap_mcode attr)) attr)
+	  (List.map r.V.combiner_attribute attr)
     | _ -> k d in
 
   let field r k d =
@@ -544,8 +553,12 @@ let do_get_constants constants keywords env (neg_pos,_) =
 	bind (k d) (minherited name)
     | Ast.MetaFieldList(name,Ast.MetaListLen(lenname,_,_,_),_,_,_) ->
 	bind (minherited name) (bind (minherited lenname) (k d))
-    | Ast.DisjField(decls) ->
-	disj_union_all (List.map r.V.combiner_field decls)
+    | _ -> k d in
+
+  let ann_field r k d =
+    match Ast.unwrap d with
+      Ast.DisjField(decls) ->
+	disj_union_all (List.map r.V.combiner_ann_field decls)
     | Ast.OptField(decl) -> option_default
     | _ -> k d in
 
@@ -630,10 +643,11 @@ let do_get_constants constants keywords env (neg_pos,_) =
   V.combiner bind option_default
     mcode mcode mcode mcode mcode mcode mcode mcode mcode
     mcode mcode mcode mcode mcode
-    donothing donothing donothing donothing donothing donothing
+    donothing donothing donothing donothing donothing donothing donothing
     ident expression string_fragment string_format donothing donothing
     fullType typeC initialiser parameter define_parameter declaration donothing
-    field donothing rule_elem statement donothing donothing donothing
+    field ann_field donothing rule_elem statement donothing attribute donothing
+    donothing
 
 (* ------------------------------------------------------------------------ *)
 
@@ -700,8 +714,9 @@ let all_context =
     mcode mcode mcode mcode mcode
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
+    donothing
     initialiser donothing donothing donothing donothing donothing donothing
-    rule_elem statement donothing donothing donothing
+    donothing rule_elem statement donothing donothing donothing donothing
 
 (* ------------------------------------------------------------------------ *)
 

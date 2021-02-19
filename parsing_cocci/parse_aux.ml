@@ -94,6 +94,7 @@ let clt2mcode_ext str isSymbol = function
        ref pos,-1)
 
 let clt2mcode name clt = clt2mcode_ext name false clt
+let id3name   (name, _, clt) = name
 let id2name   (name, clt) = name
 let id2clt    (name, clt) = clt
 let id2mcode  (name, clt) = clt2mcode name clt
@@ -135,6 +136,11 @@ let mkpdots str dot =
     "..." -> Ast0.wrap(Ast0.Pdots(clt2mcode str dot))
   | _ -> failwith "cannot happen"
 
+let mkenumdots str (dot,whencode) =
+  match str with
+    "..." -> Ast0.wrap(Ast0.EnumDots(clt2mcode str dot, whencode))
+  | _ -> failwith "cannot happen"
+
 let arith_op ast_op left op right =
   let op' = Ast0.wrap (Ast0.Arith (clt2mcode ast_op op)) in  
   Ast0.wrap (Ast0.Binary(left, op', right))
@@ -145,6 +151,9 @@ let logic_op ast_op left op right =
 
 let make_cv cv ty =
   match cv with None -> ty | Some x -> Ast0.wrap (Ast0.ConstVol(x,ty))
+
+let make_attr attr =
+  Ast0.wrap(Ast0.Attribute(id2mcode attr))
 
 let top_dots l = Ast0.wrap l
 
@@ -335,6 +344,10 @@ let check_meta_tyopt type_irrelevant v =
   | Ast.MetaFragListDecl(Ast.NONE,(rule,name),len) ->
       (match meta_lookup rule name v with
 	Ast.MetaFragListDecl(_,_,_) -> ()
+      | _ -> fail name)
+  | Ast.MetaAttributeDecl(Ast.NONE,(rule,name)) ->
+      (match meta_lookup rule name v with
+	Ast.MetaAttributeDecl(_,_) -> ()
       | _ -> fail name)
   | Ast.MetaAnalysisDecl(analyzer,(rule,name)) ->
       (match meta_lookup rule name v with
@@ -815,20 +828,20 @@ let drop_minus_plus l clt =
     check_no_duplicates res;
     (line,res)
 
-let not_format_string str clt =
-  Ast0.wrap(Ast0.Constant (clt2mcode (Ast.String str) clt))
+let not_format_string str clt isChar =
+  Ast0.wrap(Ast0.Constant (clt2mcode (Ast.String(str, isChar)) clt))
 
 let nometas str =
   match Str.split_delim (Str.regexp "@") str with
     before::within::after::_ -> false (* need at least %@d@ *)
   | _ -> true
 
-let parse_string str ((mc,b,c,d,e,f,g,h,i,_) as clt) =
+let parse_string str ((mc,b,c,d,e,f,g,h,i,_) as clt) isChar =
   match mc with
     Data.PLUS when nometas str ->
       (* not matched against, no internal changes possible, so no need to
 	 parse *)
-      not_format_string str clt
+      not_format_string str clt isChar
    | _ ->
        if List.length(Str.split_delim (Str.regexp "%") str) > 1
        then
@@ -842,10 +855,10 @@ let parse_string str ((mc,b,c,d,e,f,g,h,i,_) as clt) =
 	     let middle = Ast0.wrap middle in
 	     let last = clt2mcode "\"" (update_line clt (line-1)) in
 	     contains_string_constant := true;
-	     Ast0.wrap(Ast0.StringConstant(first,middle,last))
+	     Ast0.wrap(Ast0.StringConstant(first,middle,last,isChar))
 	   end
-	 with Parse_printf.Not_format_string -> not_format_string str clt
-       else not_format_string str clt
+	 with Parse_printf.Not_format_string -> not_format_string str clt isChar
+       else not_format_string str clt isChar
 
 let unfloatl s =
   match Str.split_delim (Str.regexp_string ".") s with
@@ -856,3 +869,22 @@ let unfloatr s =
   match Str.split_delim (Str.regexp_string ".") s with
     ["";thing] -> thing
   | _ -> failwith (Printf.sprintf "unexpected float in length range: %s\n" s)
+
+let mk_script nm pos lang params code prefix =
+  let rule =
+    String.concat "_" (Str.split (Str.regexp " ") !Ast0.rule_name) in
+  let key = Printf.sprintf "%s_code_%s_0_%s" prefix rule (snd nm) in
+  let code = String.concat " " code in
+  let lang' = id2name lang in
+  let code' =
+    if lang' = "ocaml" then
+      let (file, line) = pos in
+      Printf.sprintf "\n# %d \"%s\"\n%s" line file code
+    else code in
+  let params =
+    List.map
+      (fun (rl, nm) ->
+        let mv = lookup rl nm in
+        ((rl, nm), mv))
+      (List.rev params) in
+  (key, lang', params, pos, code')

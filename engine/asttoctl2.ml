@@ -341,9 +341,10 @@ let elim_opt =
     mcode mcode mcode mcode mcode mcode mcode mcode mcode
     mcode mcode mcode mcode mcode
     donothing donothing stmtdotsfn donothing donothing donothing donothing
-    donothing donothing donothing donothing donothing
+    donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
+    donothing donothing
 
 (* --------------------------------------------------------------------- *)
 (* after management *)
@@ -464,11 +465,12 @@ let contains_modif =
     V.combiner bind option_default
       mcode mcode mcode mcode mcode mcode mcode mcode mcode
       mcode mcode mcode mcode mcode
-      do_nothing do_nothing do_nothing do_nothing do_nothing
+      do_nothing do_nothing do_nothing do_nothing do_nothing do_nothing
       do_nothing do_nothing do_nothing do_nothing do_nothing
       do_nothing do_nothing do_nothing do_nothing init do_nothing do_nothing
       do_nothing do_nothing do_nothing
-      do_nothing rule_elem do_nothing do_nothing do_nothing do_nothing in
+      do_nothing do_nothing rule_elem do_nothing do_nothing do_nothing
+      do_nothing do_nothing in
   recursor.V.combiner_rule_elem
 
 let contains_pos =
@@ -495,8 +497,9 @@ let contains_pos =
       do_nothing do_nothing do_nothing do_nothing do_nothing do_nothing
       do_nothing do_nothing do_nothing do_nothing do_nothing do_nothing
       do_nothing do_nothing do_nothing do_nothing do_nothing do_nothing
-      do_nothing do_nothing
-      do_nothing rule_elem do_nothing do_nothing do_nothing do_nothing in
+      do_nothing do_nothing do_nothing
+      do_nothing do_nothing rule_elem do_nothing do_nothing do_nothing
+      do_nothing do_nothing in
   recursor.V.combiner_rule_elem
 
 (* code is not a DisjRuleElem *)
@@ -592,10 +595,11 @@ let count_nested_braces s =
   let recursor = V.combiner bind option_default
       mcode mcode mcode mcode mcode mcode mcode mcode mcode
       mcode mcode mcode mcode mcode
-      donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
-      donothing donothing stmt_count donothing donothing donothing in
+      donothing donothing donothing donothing donothing donothing donothing
+      donothing donothing donothing stmt_count donothing donothing donothing
+      donothing in
   let res = string_of_int (recursor.V.combiner_statement s) in
   string2var ("p"^res)
 
@@ -2408,14 +2412,23 @@ and statement stmt top after quantified minus_quantified
             (* special case for function header + body - header is unambiguous
 	       and unique, so we can just look for the nested body anywhere
 	       else in the CFG *)
+		let pattern =
+		  statement_list stmt_dots NotTop
+		    (* discards match on right brace, but don't need it *)
+		    (Guard (make_seq_after end_brace after))
+		    new_quantified3 new_mquantified3
+		    None llabel slabel true guard in
+		(* The following is based on what is generated for nest code in
+		   dots_and_nests.  We skip is_plus, because that is not the case
+		   here.  Also no whencode. *)
+		let v = get_let_ctr() in
+		let complete_pattern =
+		  CTL.Let(v,pattern,
+			  CTL.Or(CTL.Ref v,CTL.Not(ctl_uncheck (CTL.Ref v)))) in
 		Some
 		  (CTL.AndAny
 		     (CTL.FORWARD,guard_to_strict guard,start_brace,
-		      statement_list stmt_dots NotTop
-		 (* discards match on right brace, but don't need it *)
-			(Guard (make_seq_after end_brace after))
-			new_quantified3 new_mquantified3
-			None llabel slabel true guard))
+		      complete_pattern))
 	    | Ast.Dots((_,i,d,_),whencode,_,_) when
 		(List.for_all
 		   (* flow sensitive, so not optimizable *)
@@ -2507,17 +2520,23 @@ and statement stmt top after quantified minus_quantified
 		    (Ast.SeqStart((_,_,Ast.MINUS(_,_,_,Ast.NOREPLACEMENT),_)),
 		     Ast.SeqEnd((_,_,Ast.MINUS(_,_,_,Ast.NOREPLACEMENT),_)))
 		    when not (contains_pos rbrace) ->
-		      Some
 			(* andany drops everything to the end, including close
 			   braces - not just function body, could check
 			   label to keep braces *)
+		      let pattern = (* see optim1 *)
+			make_match
+			  (make_meta_rule_elem "6" d Ast.CstrTrue
+			     ([],[],[])) in
+		      let v = get_let_ctr() in
+		      let complete_pattern =
+			CTL.Let(v,pattern,
+				CTL.Or(CTL.Ref v,CTL.Not(ctl_uncheck (CTL.Ref v)))) in
+		      Some
 			(ctl_and start_brace
 			   (ctl_ax
 			      (CTL.AndAny
 				 (CTL.FORWARD,guard_to_strict guard,CTL.True,
-				  make_match
-				    (make_meta_rule_elem "6" d Ast.CstrTrue
-				       ([],[],[]))))))
+				  complete_pattern))))
 		  | _ -> None)
 	    | _ -> None)
 	| _ -> None in
@@ -2682,10 +2701,10 @@ and drop_minuses stmt_dots =
     V.rebuilder
       mcode mcode mcode mcode mcode mcode mcode mcode mcode
       mcode mcode mcode mcode mcode
-      donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
-      donothing donothing donothing donothing donothing donothing in
+      donothing donothing donothing donothing donothing donothing donothing
+      donothing donothing donothing donothing donothing donothing donothing donothing in
   v.V.rebuilder_statement_dots stmt_dots
 
 and find_xx = function

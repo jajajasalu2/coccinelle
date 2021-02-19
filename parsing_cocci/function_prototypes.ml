@@ -68,7 +68,7 @@ let drop_positions =
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
     donothing donothing donothing donothing donothing donothing donothing
-    donothing in
+    donothing donothing donothing donothing in
   res.VT0.rebuilder_rec_statement
 
 let get_all_functions rule =
@@ -167,13 +167,22 @@ and strip =
 	     Ast0.MetaParamList(nm,lenname,cstr,Ast0.Pure)
 	 | e -> e)) in
 
+  let attribute r k e =
+    donothing r k
+      (Ast0.rewrap e
+	 (match Ast0.unwrap e with
+	   Ast0.MetaAttribute(nm,cstr,pure) ->
+	     Ast0.MetaAttribute(nm,cstr,Ast0.Pure)
+	 | e -> e)) in
+
   V0.flat_rebuilder
     mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
     mcode mcode
     donothing donothing donothing donothing donothing donothing donothing
-    donothing
+    donothing donothing
     ident donothing donothing donothing typeC donothing param
     donothing donothing donothing donothing donothing donothing donothing
+    attribute donothing
 
 and changed_proto = function
     (mname,mdef,mproto,None) -> true
@@ -197,7 +206,7 @@ let collect_ident_strings id =
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
-      donothing in
+      donothing donothing donothing donothing in
       v.VT0.combiner_rec_ident id
 
 let right_attach_mcode strings (x,ar,info,mc,pos,adj) =
@@ -226,9 +235,10 @@ let rec attach_right strings ty =
     | Ast0.Signed(sgn,Some ty) ->
 	Ast0.Signed(sgn,Some (attach_right strings ty))
     | Ast0.Pointer(ty,star) -> Ast0.Pointer(ty,right_attach_mcode strings star)
-    | Ast0.FunctionPointer(ty,lp,star,rp,lp1,ps,rp1) ->
-	Ast0.FunctionPointer(ty,lp,star,rp,lp1,ps,
-			     right_attach_mcode strings rp1)
+    | Ast0.ParenType(lp,ty,rp) ->
+	Ast0.ParenType(lp,ty,right_attach_mcode strings rp)
+    | Ast0.FunctionType(ty,lp,ps,rp) ->
+	Ast0.FunctionType(ty,lp,ps,right_attach_mcode strings rp)
     | Ast0.Array(ty,lb,e,rb) ->
 	Ast0.Array(ty,lb,e,right_attach_mcode strings rb)
     | Ast0.Decimal(dec,lp,e1,comma,e2,rp) ->
@@ -250,6 +260,7 @@ let rec attach_right strings ty =
     | Ast0.TypeOfType(tf,lp,ty,rp) ->
 	Ast0.TypeOfType(tf,lp,ty,right_attach_mcode strings rp)
     | Ast0.TypeName(nm) -> Ast0.TypeName(right_attach_mcode strings nm)
+    | Ast0.AutoType(auto) -> Ast0.AutoType(right_attach_mcode strings auto)
     | Ast0.MetaType(nm,cstr,pure) ->
 	Ast0.MetaType(right_attach_mcode strings nm,cstr,pure)
     | Ast0.AsType(ty,asty) -> Ast0.AsType(attach_right strings ty,asty)
@@ -258,10 +269,10 @@ let rec attach_right strings ty =
 let rec drop_param_name p =
   Ast0.rewrap p
     (match Ast0.unwrap p with
-      Ast0.Param(p,Some id) ->
+      Ast0.Param(p,Some id,attr) ->
 	let strings = collect_ident_strings id in
 	let p = attach_right strings p in
-	Ast0.Param(p,None)
+	Ast0.Param(p,None,attr)
     | Ast0.OptParam(p) -> Ast0.OptParam(drop_param_name p)
     | p -> p)
 
@@ -294,7 +305,7 @@ let new_iname name index =
 
 let rec rename_param old_name all param index =
   match Ast0.unwrap param with
-    Ast0.Param(ty,Some id) when all ->
+    Ast0.Param(ty,Some id,attr) when all ->
       (match Ast0.unwrap id with
 	Ast0.MetaId
 	  (((_,name),arity,info,mcodekind,pos,adj),constraints,seed,pure) ->
@@ -305,7 +316,7 @@ let rec rename_param old_name all param index =
 		 ((nm,arity,info,mcodekind,pos,adj),constraints,seed,
 		  Ast0.Pure)) in
 	  ([Ast.MetaIdDecl(Ast.NONE,nm)],
-	   Ast0.rewrap param (Ast0.Param(ty,Some new_id)))
+	   Ast0.rewrap param (Ast0.Param(ty,Some new_id,attr)))
       |	_ -> ([],param))
   | Ast0.Pdots(d) ->
       let nm = (old_name,new_iname "__P" index) in

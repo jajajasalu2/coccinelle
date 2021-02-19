@@ -106,6 +106,10 @@ and seed table minus = function
 	    Ast.SeedString _ -> ()
 	  | Ast.SeedId name -> check_table table minus (promote name))
 	elems
+  | Ast.ScriptSeed (_, _, params, _, _) ->
+      List.iter
+        (fun (meta_name, _) -> check_table table minus (promote meta_name))
+        params
 
 (* --------------------------------------------------------------------- *)
 (* Operators *)
@@ -127,7 +131,7 @@ let rec expression context old_metas table minus e =
   match Ast0.unwrap e with
     Ast0.Ident(id) ->
       ident context old_metas table minus id
-  | Ast0.StringConstant(lq,str,rq) ->
+  | Ast0.StringConstant(lq,str,rq,isWchar) ->
       dots (string_fragment old_metas table minus) str
   | Ast0.FunCall(fn,lp,args,rp) ->
       expression FN old_metas table minus fn;
@@ -168,8 +172,10 @@ let rec expression context old_metas table minus e =
   | Ast0.RecordPtAccess(exp,ar,field) ->
       expression ID old_metas table minus exp;
       ident FIELD old_metas table minus field
-  | Ast0.Cast(lp,ty,rp,exp) ->
-      typeC old_metas table minus ty; expression ID old_metas table minus exp
+  | Ast0.Cast(lp,ty,attr,rp,exp) ->
+      typeC old_metas table minus ty;
+      List.iter (attribute old_metas table minus) attr;
+      expression ID old_metas table minus exp
   | Ast0.SizeOfExpr(szf,exp) -> expression ID old_metas table minus exp
   | Ast0.SizeOfType(szf,lp,ty,rp) -> typeC old_metas table minus ty
   | Ast0.TypeExp(ty) -> typeC old_metas table minus ty
@@ -217,7 +223,9 @@ and typeC old_metas table minus t =
   | Ast0.Signed(sgn,ty) ->
       get_opt (typeC old_metas table minus) ty
   | Ast0.Pointer(ty,star) -> typeC old_metas table minus ty
-  | Ast0.FunctionPointer(ty,lp1,star,rp1,lp2,params,rp2) ->
+  | Ast0.ParenType(lp,ty,rp) ->
+      typeC old_metas table minus ty
+  | Ast0.FunctionType(ty,lp,params,rp) ->
       typeC old_metas table minus ty;
       parameter_list old_metas table minus params
   | Ast0.Array(ty,lb,size,rb) ->
@@ -226,6 +234,8 @@ and typeC old_metas table minus t =
   | Ast0.Decimal(dec,lp,length,comma,precision_opt,rp) ->
       expression ID old_metas table minus length;
       get_opt (expression ID old_metas table minus) precision_opt
+  | Ast0.TypeOfExpr(_, _, exp, _) -> expression ID old_metas table minus exp
+  | Ast0.TypeOfType(_, _, ty, _) -> typeC old_metas table minus ty
   | Ast0.MetaType(name,_,_) ->
       check_table table minus name
   | Ast0.AsType(ty,asty) -> failwith "not generated yet"
@@ -235,7 +245,7 @@ and typeC old_metas table minus t =
   | Ast0.EnumName(en,Some id) -> ident GLOBAL old_metas table minus id
   | Ast0.EnumDef(ty,lb,ids,rb) ->
       typeC old_metas table minus ty;
-      dots (expression GLOBAL old_metas table minus) ids
+      dots (enum_decl GLOBAL old_metas table minus) ids
   | Ast0.StructUnionName(su,Some id) -> ident GLOBAL old_metas table minus id
   | Ast0.StructUnionDef(ty,lb,decls,rb) ->
       typeC old_metas table minus ty;
@@ -257,6 +267,7 @@ and declaration context old_metas table minus d =
   | Ast0.Init(stg,ty,id,attr,eq,ini,sem) ->
       typeC old_metas table minus ty;
       ident context old_metas table minus id;
+      List.iter (attribute old_metas table minus) attr;
       (match Ast0.unwrap ini with
 	Ast0.InitExpr exp ->
 	  expression ID old_metas table minus exp
@@ -268,13 +279,15 @@ and declaration context old_metas table minus d =
 	  else*)
 	    initialiser old_metas table minus ini)
   | Ast0.UnInit(stg,ty,id,attr,sem) ->
-      typeC old_metas table minus ty; ident context old_metas table minus id
+      typeC old_metas table minus ty; ident context old_metas table minus id;
+      List.iter (attribute old_metas table minus) attr
   | Ast0.FunProto(fi,name,lp1,params,va,rp1,sem) ->
       ident FN old_metas table minus name;
       List.iter (fninfo old_metas table minus) fi;
       parameter_list old_metas table minus params
-  | Ast0.MacroDecl(stg,name,lp,args,rp,sem) ->
+  | Ast0.MacroDecl(stg,name,lp,args,rp,attr,sem) ->
       ident GLOBAL old_metas table minus name;
+      List.iter (attribute old_metas table minus) attr;
       dots (expression ID old_metas table minus) args
   | Ast0.MacroDeclInit(stg,name,lp,args,rp,eq,ini,sem) ->
       ident GLOBAL old_metas table minus name;
@@ -282,7 +295,9 @@ and declaration context old_metas table minus d =
       (match Ast0.unwrap ini with
 	Ast0.InitExpr exp -> expression ID old_metas table minus exp
       |	_ -> initialiser old_metas table minus ini)
-  | Ast0.TyDecl(ty,sem) -> typeC old_metas table minus ty
+  | Ast0.TyDecl(ty,attr,sem) ->
+      typeC old_metas table minus ty;
+      List.iter (attribute old_metas table minus) attr
   | Ast0.Typedef(stg,ty,id,sem) ->
       typeC old_metas table minus ty;
       typeC old_metas table minus id
@@ -314,6 +329,15 @@ and field context old_metas table minus d =
       failwith "unexpected code"
   | Ast0.Fdots(_,Some (_,_,x)) -> field ID old_metas table minus x
   | Ast0.Fdots(_,None) -> ()
+
+and enum_decl context old_metas table minus d =
+  match Ast0.unwrap d with
+    Ast0.Enum(name,enum_val) ->
+      ident context old_metas table minus name;
+      (match enum_val with
+        None -> ()
+      | Some(eq,eval) -> expression context old_metas table minus eval)
+  | Ast0.EnumComma(_) | Ast0.EnumDots(_) -> ()
 
 (* --------------------------------------------------------------------- *)
 (* Initialiser *)
@@ -357,9 +381,10 @@ and initialiser_list old_metas table minus =
 
 and parameterTypeDef old_metas table minus param =
   match Ast0.unwrap param with
-    Ast0.Param(ty,id) ->
+    Ast0.Param(ty,id,attr) ->
       get_opt (ident ID old_metas table minus) id;
-      typeC old_metas table minus ty
+      typeC old_metas table minus ty;
+      List.iter (attribute old_metas table minus) attr
   | Ast0.MetaParam(name,_,_) ->
       check_table table minus name
   | Ast0.MetaParamList(name,len,_,_) ->
@@ -499,7 +524,13 @@ and fninfo old_metas table minus = function
     Ast0.FStorage(stg) -> ()
   | Ast0.FType(ty) -> typeC old_metas table minus ty
   | Ast0.FInline(inline) -> ()
-  | Ast0.FAttr(attr) -> ()
+  | Ast0.FAttr(attr) -> attribute old_metas table minus attr
+
+and attribute old_metas table minus x =
+  match Ast0.unwrap x with
+    Ast0.MetaAttribute(name,_,_) ->
+      check_table table minus name
+  | _ -> ()
 
 and whencode notfn alwaysfn expression = function
     Ast0.WhenNot (_,_,a) -> notfn a
@@ -577,7 +608,7 @@ let positions rname table rules =
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
       donothing donothing donothing donothing donothing donothing donothing
-      donothing in
+      donothing donothing donothing donothing in
 
   List.iter fn.VT0.combiner_rec_top_level rules
 
@@ -645,9 +676,9 @@ let dup_positions rules =
       mcode mcode mcode mcode mcode mcode mcode mcode mcode mcode
       mcode mcode mcode mcode
       donothing donothing donothing donothing donothing donothing donothing
-      donothing donothing expression donothing donothing typeC donothing
-      donothing declaration field statement
-      donothing donothing donothing donothing in
+      donothing donothing donothing expression donothing donothing typeC
+      donothing donothing declaration field donothing statement
+      donothing donothing donothing donothing donothing in
 
   let res =
     List.sort compare

@@ -55,6 +55,7 @@ type pretty_printers = {
   fragment        : Ast_c.string_fragment printer;
   fragment_list   : (Ast_c.string_fragment list) printer;
   format          : Ast_c.string_format printer;
+  attribute       : Ast_c.attribute printer;
   flow            : Control_flow_c.node printer;
   name            : Ast_c.name printer
 }
@@ -146,8 +147,9 @@ let mk_pretty_printers
 	pp_expression e
     | SizeOfType  (t),     [i1;i2;i3] ->
         pr_elem i1; pr_elem i2; pp_type t; pr_elem i3
-    | Cast    (t, e),      [i1;i2] ->
-        pr_elem i1; pp_type t; pr_elem i2; pp_expression e
+    | Cast    (t, a, e),   [i1;i2] ->
+        pr_elem i1; pp_type t; a +> pp_attributes pr_elem pr_space;
+        pr_elem i2; pp_expression e;
 
     | StatementExpr (statxs, [ii1;ii2]),  [i1;i2] ->
         pr_elem i1;
@@ -184,7 +186,7 @@ let mk_pretty_printers
     | CondExpr (_,_,_) | Sequence (_,_) | Assignment (_,_,_)
     | Postfix (_,_) | Infix (_,_) | Unary (_,_) | Binary (_,_,_)
     | ArrayAccess (_,_) | RecordAccess (_,_) | RecordPtAccess (_,_)
-    | SizeOfExpr (_) | SizeOfType (_) | Cast (_,_)
+    | SizeOfExpr (_) | SizeOfType (_) | Cast (_,_,_)
     | StatementExpr (_) | Constructor _
     | ParenExpr (_) | New (_) | Delete (_,_)
     | Defined (_)),_ -> raise (Impossible 95)
@@ -662,6 +664,7 @@ and pp_string_format (e,ii) =
               pr_elem icpar;
           | _ -> raise (Impossible 106)
 	  )
+      | (AutoType, iis) -> print_sto_qu_ty (sto, qu, iis)
 
       | (Pointer _ | (*ParenType _ |*) Array _ | FunctionType _ | Decimal _
             (* | StructUnion _ | Enum _ | BaseType _ *)
@@ -796,6 +799,7 @@ and pp_string_format (e,ii) =
       | (FieldType (_typ,_,_), iis)             -> print_ident ident
       | (TypeOfExpr (e), iis)                   -> print_ident ident
       | (TypeOfType (e), iis)                   -> print_ident ident
+      | (AutoType, _)                           -> print_ident ident
 
 
 
@@ -804,9 +808,14 @@ and pp_string_format (e,ii) =
              (FunctionType (return=void, params=int i) *)
           (*WRONG I THINK, use left & right function *)
           (* bug: pp_type_with_ident_rest None t;      print_ident ident *)
+          pp_type_left t;
           pr_elem i;
-          iiqu +> List.iter pr_elem; (* le const est forcement apres le '*' *)
-          pp_type_with_ident_rest ident t attrs Ast_c.noattr;
+          iiqu +>
+          List.iter (* le const est forcement apres le '*' *)
+            (function x -> pr_space(); pr_elem x);
+          if iiqu <> [] || get_comments_after i <> []
+          then pr_space();
+          print_ident ident
 
       (* ugly special case ... todo? maybe sufficient in practice *)
       | (ParenType ttop, [i1;i2]) ->
@@ -883,9 +892,13 @@ and pp_string_format (e,ii) =
       match ty, iity with
 	(NoType,_) -> failwith "pp_type_left: unexpected NoType"
       | (Pointer t, [i]) ->
+          pp_type_left t;
           pr_elem i;
-          iiqu +> List.iter pr_elem; (* le const est forcement apres le '*' *)
-          pp_type_left t
+          iiqu +>
+          List.iter (* le const est forcement apres le '*' *)
+            (function x -> pr_space(); pr_elem x);
+          if iiqu <> [] || get_comments_after i <> []
+          then pr_space()
 
       | (Array (eopt, t), [i1;i2]) -> pp_type_left t
       | (FunctionType (returnt, paramst), [i1;i2]) -> pp_type_left returnt
@@ -903,6 +916,7 @@ and pp_string_format (e,ii) =
       | FieldType (_, _, _), _ -> ()
       | TypeOfType _, _ -> ()
       | TypeOfExpr _, _ -> ()
+      | AutoType, _ -> ()
 
       | (FunctionType _ | Array _ | Pointer _), _ -> raise (Impossible 110)
 
@@ -961,6 +975,7 @@ and pp_string_format (e,ii) =
 
     | TypeOfType _, _ -> ()
     | TypeOfExpr _, _ -> ()
+    | AutoType, _ -> ()
 
     | (FunctionType _ | Array _ | Pointer _), _ -> raise (Impossible 111)
 
@@ -1030,7 +1045,8 @@ and pp_string_format (e,ii) =
 
 	pr_elem iivirg;
 
-    | MacroDecl ((sto, s, es, true), iis::lp::rp::iiend::ifakestart::iisto) ->
+    | MacroDecl
+      ((sto, s, es, attrs, true), iis::lp::rp::iiend::ifakestart::iisto) ->
 	pr_elem ifakestart;
 	iisto +> List.iter pr_elem; (* static and const *)
 	pr_elem iis;
@@ -1040,11 +1056,11 @@ and pp_string_format (e,ii) =
           opt +> List.iter pr_elem;
           pp_argument e;
 	);
-
 	pr_elem rp;
 	pr_elem iiend;
 
-    | MacroDecl ((sto, s, es, false), iis::lp::rp::ifakestart::iisto) ->
+    | MacroDecl
+      ((sto, s, es, attrs, false), iis::lp::rp::ifakestart::iisto) ->
 	pr_elem ifakestart;
 	iisto +> List.iter pr_elem; (* static and const *)
 	pr_elem iis;
@@ -1129,6 +1145,12 @@ and pp_init (init, iinit) =
     attrs +> List.iter (fun (attr, ii) ->
       ii +> List.iter pr_elem;
     );
+
+  and pp_attribute (e,ii) =
+    match (e,ii) with
+      Attribute(a), ii  ->
+        let (i) = Common.tuple_of_list1 ii in
+        pr_elem i
 
 (* ---------------------- *)
   and pp_def_start defbis iifunc1 iifunc2 ifakestart isto =
@@ -1509,6 +1531,7 @@ and pp_init (init, iinit) =
     toplevel   = pp_toplevel;
     fragment   = pp_string_fragment;
     fragment_list = pp_string_fragment_list;
+    attribute  = pp_attribute;
     format     = pp_string_format;
     flow       = pp_flow;
     name       = pp_name;
@@ -1568,6 +1591,7 @@ let pp_init_simple       = ppc.init
 let pp_toplevel_simple   = ppc.toplevel
 let pp_string_fragment_simple = ppc.fragment
 let pp_string_format_simple = ppc.format
+let pp_attribute_simple  = ppc.attribute
 let pp_flow_simple       = ppc.flow
 let pp_name              = ppc.name
 
@@ -1634,6 +1658,9 @@ let pp_string_fragment_list_gen ~pr_elem ~pr_space =
 let pp_string_format_gen ~pr_elem ~pr_space =
   (pp_elem_sp pr_elem pr_space).format
 
+let pp_attribute_gen ~pr_elem ~pr_space =
+  (pp_elem_sp pr_elem pr_space).attribute
+
 let pp_program_gen ~pr_elem ~pr_space =
   (pp_elem_sp pr_elem pr_space).toplevel
 
@@ -1646,7 +1673,7 @@ let string_of_expression e =
 let string_of_ifdef_guard = function
   | Gifdef s  -> "defined(" ^ s ^ ")"
   | Gifndef s -> "!defined(" ^ s ^ ")"
-  | Gif_str s -> s
+  | Gif_str (_,s) -> s
   | Gif e     -> string_of_expression e
   | Gnone     -> "0"
 

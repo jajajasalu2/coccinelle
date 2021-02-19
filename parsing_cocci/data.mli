@@ -112,6 +112,7 @@ val add_binaryOp_meta:
 
 val add_type_name: (string -> unit) ref
 val add_attribute: (string -> unit) ref
+val add_attribute_meta: cstr_meta_type ref
 val add_declarer_name: (string -> unit) ref
 val add_iterator_name: (string -> unit) ref
 val init_rule: (unit -> unit) ref
@@ -134,3 +135,15 @@ val constraint_scripts:
 val non_local_script_constraints:
     ((string (* rule name *) * Ast_cocci.meta_name),
      (Ast_cocci.meta_name * Ast_cocci.script_constraint) list ref) Hashtbl.t
+
+val fresh_id_scripts:
+    (Ast_cocci.meta_name * Ast_cocci.seed_script) list ref
+(** The list of all fresh id scripts. *)
+
+(* ---------------------------------------------------------------------- *)
+(* Names of some special tokens.  Make these acessible to the C parser *)
+
+val type_names : string list ref
+val attr_names : string list ref
+val declarer_names : string list ref
+val iterator_names : string list ref

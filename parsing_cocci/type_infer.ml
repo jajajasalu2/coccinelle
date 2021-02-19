@@ -59,6 +59,8 @@ let lub_type t1 t2 =
             Ast0.rewrap ty1 (Ast0.Array(loop ty1 ty2, s0, e0, s1))
 	| (Ast0.TypeName(_),_) -> ty2
 	| (_,Ast0.TypeName(_)) -> ty1
+        | (Ast0.AutoType(_), _) -> ty2
+        | (_, Ast0.AutoType(_)) -> ty1
 	| _ -> ty1 in (* arbitrarily pick the first, assume type correct *)
       Some (loop t1 t2)
 
@@ -161,18 +163,19 @@ let rec propagate_types env =
               Ast0.rewrap e (
                 Ast0.Array(Ast0.rewrap e char_type, dummy, None, dummy)))
 	| Ast0.FunCall(fn,lp,args,rp) ->
-	    (match Common.map_option Ast0.unwrap (Ast0.get_type fn) with
-		 Some (Ast0.FunctionPointer(ty, _, _, _, _, _, _)) -> Some ty
-	       |  _ ->
-		    (match Ast0.unwrap fn with
-			 Ast0.Ident(id) ->
-			   (match Ast0.unwrap id with
-				Ast0.Id(id) ->
-				  if List.mem (Ast0.unwrap_mcode id) bool_functions
-				  then Some(Ast0.rewrap e bool_type)
-				  else None
-			      | _ -> None)
-		       |	_ -> None))
+            let fna = Common.map_option Ast0.unwrap (Ast0.get_type fn) in
+            (match fna with
+                 Some _ ->
+                 (match Ast0.unwrap fn with
+                    Ast0.Ident(id) ->
+                      (match Ast0.unwrap id with
+                         Ast0.Id(id) ->
+                           if List.mem (Ast0.unwrap_mcode id) bool_functions
+                           then Some(Ast0.rewrap e bool_type)
+                           else None
+                       | _ -> None)
+                  | _ -> None)
+            | _ -> None)
 	| Ast0.Assignment(exp1,op,exp2,_) ->
 	    let ty = lub_type (Ast0.get_type exp1) (Ast0.get_type exp2) in
 	      Ast0.set_type exp1 ty; Ast0.set_type exp2 ty; ty
@@ -288,7 +291,7 @@ let rec propagate_types env =
                | Some x ->
                    let ty = Ast0.wrap x in
                    err exp ty "non-structure pointer type in field ref")
-	| Ast0.Cast(lp,ty,rp,exp) -> Some ty
+	| Ast0.Cast(lp,ty,attr,rp,exp) -> Some ty
 	| Ast0.SizeOfExpr(szf,exp) -> Some (Ast0.wrap int_type)
 	| Ast0.SizeOfType(szf,lp,ty,rp) -> Some (Ast0.wrap int_type)
 	| Ast0.TypeExp(ty) -> None
@@ -377,11 +380,11 @@ let rec propagate_types env =
     | Ast0.UnInit(_,ty,id,_,_) ->
 	List.map (function i -> (i,ty)) (strip id)
     | Ast0.FunProto(fi,nm,lp,params,va,rp,sem) -> []
-    | Ast0.MacroDecl(_,_,_,_,_,_) -> []
+    | Ast0.MacroDecl(_,_,_,_,_,_,_) -> []
     | Ast0.MacroDeclInit(_,_,_,_,_,_,exp,_) ->
         let _ = (propagate_types env).VT0.combiner_rec_initialiser exp in
 	[]
-    | Ast0.TyDecl(ty,_) -> []
+    | Ast0.TyDecl(ty,_,_) -> []
               (* pad: should handle typedef one day and add a binding *)
     | Ast0.Typedef((a,_,_,_,_,_),b,c,(d,_,_,_,_,_)) ->
 	[]
@@ -417,7 +420,7 @@ let rec propagate_types env =
       Ast0.FunDecl(_,fninfo,name,lp,params,va,rp,lbrace,body,rbrace,_) ->
 	let rec get_binding p =
 	  match Ast0.unwrap p with
-	    Ast0.Param(ty,Some id) ->
+	    Ast0.Param(ty,Some id,attr) ->
 	      List.map (function i -> (i,ty)) (strip id)
 	  | Ast0.OptParam(param) -> get_binding param
 	  | Ast0.AsParam(param,e) -> get_binding param

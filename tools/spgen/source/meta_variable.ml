@@ -131,6 +131,11 @@ let seed ~rn =
     | Ast.NoVal -> ""
     | Ast.StringSeed s -> " = \"" ^ s ^ "\""
     | Ast.ListSeed s -> " = " ^ (String.concat " ## " (List.map se s))
+    | Ast.ScriptSeed (_, lang, params, _pos, code) ->
+        Printf.sprintf " = script:%s (%s) {%s}"
+          lang
+          (String.concat "," (List.map (fun (nm,_) -> name_str ~rn nm) params))
+          code
 
 let string_of_operator_constraint cstr =
   match cstr with
@@ -268,7 +273,6 @@ let types ~rn = function
         | Ast.StructUnionName(_, Some n) -> get_meta_id acc n
         | Ast.SignedT (_, Some t) -> get_meta_type acc t
         | Ast.Pointer (t, _)
-        | Ast.FunctionPointer (t, _, _, _, _, _, _)
         | Ast.Array (t, _, _, _) -> get_meta_type_full acc t
 	| Ast.TypeOfExpr(_,_,exp,_) -> acc (* not sure *)
 	| Ast.TypeOfType(_,_,ty,_) -> get_meta_type_full acc ty
@@ -385,11 +389,13 @@ let metavar_combiner rn =
   let dotsstmtfn = donothing in
   let dotsdeclfn = donothing in
   let dotsfieldfn = donothing in
+  let dotsenumdeclfn = donothing in
   let dotscasefn = donothing in
   let dotsdefparfn = donothing in
   let forinfofn = donothing in
   let casefn = donothing in
   let topfn = donothing in
+  let enumdeclfn = donothing in
 
   (* --- These are shortened formatting functions that return MVSets --- *)
 
@@ -532,7 +538,7 @@ let metavar_combiner rn =
         meta_mc_format ~mc ~typ:"declaration " ~constr
     | Ast0.AsDecl(dc1, dc2) ->
         let dec = c.VT0.combiner_rec_declaration in as_format dc1 dc2 dec dec
-    | Ast0.MacroDecl(_, id, _, expdots, _, _) ->
+    | Ast0.MacroDecl(_, id, _, expdots, _, _, _) ->
         let expids = c.VT0.combiner_rec_expression_dots expdots in
         MVSet.union (ids ~rn ~typ:"declarer" ~id) expids
     | Ast0.MacroDeclInit(_, id, _, expdots, _, _, ini, _) ->
@@ -564,14 +570,21 @@ let metavar_combiner rn =
        )
     | _ -> fn v in
 
+  let attributefn c fn v =
+    match Ast0.unwrap v with
+    | Ast0.MetaAttribute(mc, idconstr, pure) ->
+        let constr = constraints ~rn idconstr in
+        meta_mc_format ~mc ~typ:"parameter " ~constr
+    | _ -> fn v in
+
   V0.flat_combiner bind option_default
     meta_mcode string_mcode const_mcode simpleAssign_mcode opAssign_mcode
     fix_mcode unary_mcode arithOp_mcode logicalOp_mcode cv_mcode sign_mcode
     struct_mcode storage_mcode inc_mcode
     dotsexprfn dotsinitfn dotsparamfn dotsstmtfn dotsdeclfn dotsfieldfn
-    dotscasefn dotsdefparfn
+    dotsenumdeclfn dotscasefn dotsdefparfn
     identfn exprfn assignOpfn binaryOpfn tyfn initfn paramfn declfn fieldfn
-    stmtfn forinfofn casefn string_fragmentfn topfn
+    enumdeclfn stmtfn forinfofn casefn string_fragmentfn attributefn topfn
 
 
 (* ------------------------------------------------------------------------- *)
